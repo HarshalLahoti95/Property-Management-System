@@ -192,15 +192,16 @@ model FinancialLedger {
 }
 
 model RentCharge {
-  id           String       @id @default(uuid())
-  ledgerId     String
-  leaseId      String
-  billingMonth DateTime
-  type         ChargeType
-  amount       Decimal      @db.Decimal(18, 2)
-  paidAmount   Decimal      @default(0.00) @db.Decimal(18, 2)
-  status       ChargeStatus
-  dueDate      DateTime
+  id                              String       @id @default(uuid())
+  ledgerId                        String
+  leaseId                         String
+  billingMonth                    DateTime
+  type                            ChargeType
+  amount                          Decimal      @db.Decimal(18, 2)
+  paidAmount                      Decimal      @default(0.00) @db.Decimal(18, 2)
+  landlordSharePercentageSnapshot Decimal      @db.Decimal(5, 2)
+  status                          ChargeStatus
+  dueDate                         DateTime
   description  String
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
