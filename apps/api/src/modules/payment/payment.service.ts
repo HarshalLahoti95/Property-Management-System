@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException, Inject, forwardRef, NotImplementedException } from '@nestjs/common';
 import { PaymentRepository } from './payment.repository';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentQueryDto } from './dto/payment-query.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
 import { PrismaService } from '../../database/prisma.service';
 import { AccountingService } from '../accounting/accounting.service';
+import { ChargeService } from '../accounting/charge.service';
 import { Payment, PaymentAllocation, PaymentStatus, ChargeStatus, UserRole } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -16,6 +17,7 @@ export class PaymentService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => AccountingService))
     private readonly accountingService: AccountingService,
+    private readonly chargeService: ChargeService,
   ) {}
 
   /**
@@ -66,6 +68,8 @@ export class PaymentService {
       // 1. Create the payment record
       const payment = await tx.payment.create({
         data: {
+          leaseId: ledger.leaseId,
+          billingMonth: new Date(dto.paymentDate),
           ledgerId: dto.ledgerId,
           tenantId: tenantId!,
           amount: paymentAmount,
@@ -104,26 +108,19 @@ export class PaymentService {
         const allocated = Prisma.Decimal.min(remainingCharge, remainingPayment);
 
         // Create Allocation
+        // TODO: placeholder split logic, not final
         await tx.paymentAllocation.create({
           data: {
             paymentId: payment.id,
             rentChargeId: charge.id,
-            amountAllocated: allocated,
+            landlordShareAmount: allocated,
+            companyShareAmount: allocated,
             allocatedAt: new Date(),
           },
         });
 
-        // Update RentCharge progress
-        const newPaidAmount = charge.paidAmount.plus(allocated);
-        const isPaid = newPaidAmount.equals(charge.amount);
-
-        await tx.rentCharge.update({
-          where: { id: charge.id },
-          data: {
-            paidAmount: newPaidAmount,
-            status: isPaid ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID,
-          },
-        });
+        // Delegate RentCharge mutation to ChargeService
+        await this.chargeService.applyAllocation(charge.id, allocated, tx);
 
         remainingPayment = remainingPayment.minus(allocated);
       }
@@ -223,127 +220,7 @@ export class PaymentService {
     dto: RefundPaymentDto,
     user: { id: string; role: string },
   ): Promise<Payment> {
-    if (user.role === UserRole.TENANT) {
-      throw new ForbiddenException('Tenants are not authorized to issue refunds.');
-    }
-
-    const originalPayment = await this.paymentRepository.findPaymentById(paymentId);
-    if (!originalPayment) {
-      throw new NotFoundException(`Payment with ID ${paymentId} not found.`);
-    }
-
-    await this.paymentRepository.validateLedgerAccess(originalPayment.ledgerId, user);
-
-    if (originalPayment.status !== PaymentStatus.CLEARED) {
-      throw new BadRequestException('Only cleared payments can be refunded.');
-    }
-
-    const refundAmount = dto.amount ? new Prisma.Decimal(dto.amount) : originalPayment.amount;
-
-    if (refundAmount.lte(0)) {
-      throw new BadRequestException('Refund amount must be greater than zero.');
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      // Check total historical refunds to avoid over-refunding
-      const existingRefunds = await tx.payment.findMany({
-        where: {
-          transactionReference: {
-            startsWith: `REFUND-${originalPayment.transactionReference}-`,
-          },
-        },
-      });
-
-      const totalRefunded = existingRefunds.reduce(
-        (sum, refund) => sum.plus(refund.amount),
-        new Prisma.Decimal(0.00),
-      );
-
-      if (totalRefunded.plus(refundAmount).gt(originalPayment.amount)) {
-        throw new BadRequestException(
-          `Cannot refund ${refundAmount.toString()}. Total refunded so far is ${totalRefunded.toString()} out of original ${originalPayment.amount.toString()}.`,
-        );
-      }
-
-      // 1. Create a new Refund Payment record
-      const refundRef = `REFUND-${originalPayment.transactionReference}-${randomUUID().slice(0, 8)}`;
-      const refundPayment = await tx.payment.create({
-        data: {
-          ledgerId: originalPayment.ledgerId,
-          tenantId: originalPayment.tenantId,
-          amount: refundAmount,
-          paymentMethod: originalPayment.paymentMethod,
-          transactionReference: refundRef,
-          status: PaymentStatus.REFUNDED,
-          paymentDate: new Date(),
-        },
-      });
-
-      // 2. If fully refunded, mark the original payment status as REFUNDED
-      if (totalRefunded.plus(refundAmount).equals(originalPayment.amount)) {
-        await tx.payment.update({
-          where: { id: originalPayment.id },
-          data: { status: PaymentStatus.REFUNDED },
-        });
-      }
-
-      // 3. Reverse allocations (LIFO - reverse newest allocations first)
-      const allocations = await tx.paymentAllocation.findMany({
-        where: { paymentId: originalPayment.id },
-        include: { rentCharge: true },
-        orderBy: { allocatedAt: 'desc' },
-      });
-
-      let remainingRefundToReverse = refundAmount;
-
-      for (const allocation of allocations) {
-        if (remainingRefundToReverse.lte(0)) break;
-
-        const reversal = Prisma.Decimal.min(allocation.amountAllocated, remainingRefundToReverse);
-
-        // Adjust charge paidAmount and status
-        const charge = allocation.rentCharge;
-        const newPaidAmount = charge.paidAmount.minus(reversal);
-        
-        let newStatus: ChargeStatus = ChargeStatus.PARTIALLY_PAID;
-        if (newPaidAmount.equals(0)) {
-          newStatus = ChargeStatus.UNPAID;
-        }
-
-        await tx.rentCharge.update({
-          where: { id: charge.id },
-          data: {
-            paidAmount: newPaidAmount,
-            status: newStatus,
-          },
-        });
-
-        // Deduct allocation or delete if fully reversed
-        if (reversal.equals(allocation.amountAllocated)) {
-          await tx.paymentAllocation.delete({
-            where: { id: allocation.id },
-          });
-        } else {
-          await tx.paymentAllocation.update({
-            where: { id: allocation.id },
-            data: {
-              amountAllocated: allocation.amountAllocated.minus(reversal),
-            },
-          });
-        }
-
-        remainingRefundToReverse = remainingRefundToReverse.minus(reversal);
-      }
-
-      // 4. Trigger callback with a negative value to increase the ledger's outstanding balance
-      await this.accountingService.handlePaymentApplied(
-        originalPayment.ledgerId,
-        refundPayment.id,
-        refundAmount.negated().toNumber(),
-      );
-
-      return refundPayment;
-    });
+    throw new NotImplementedException('Refund processing is explicitly out of scope for v1. No data will be modified.');
   }
 
   /**
@@ -397,25 +274,19 @@ export class PaymentService {
         const remainingCharge = charge.amount.minus(charge.paidAmount);
         const allocated = Prisma.Decimal.min(remainingCharge, remainingPayment);
 
+        // TODO: placeholder split logic, not final
         await tx.paymentAllocation.create({
           data: {
             paymentId: payment.id,
             rentChargeId: charge.id,
-            amountAllocated: allocated,
+            landlordShareAmount: allocated,
+            companyShareAmount: allocated,
             allocatedAt: new Date(),
           },
         });
 
-        const newPaidAmount = charge.paidAmount.plus(allocated);
-        const isPaid = newPaidAmount.equals(charge.amount);
-
-        await tx.rentCharge.update({
-          where: { id: charge.id },
-          data: {
-            paidAmount: newPaidAmount,
-            status: isPaid ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID,
-          },
-        });
+        // Delegate RentCharge mutation to ChargeService
+        await this.chargeService.applyAllocation(charge.id, allocated, tx);
 
         remainingPayment = remainingPayment.minus(allocated);
       }

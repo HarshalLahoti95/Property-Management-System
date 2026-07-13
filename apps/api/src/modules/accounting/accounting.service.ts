@@ -4,6 +4,8 @@ import { CreateChargeDto } from './dto/create-charge.dto';
 import { AdjustChargeDto } from './dto/adjust-charge.dto';
 import { ChargeQueryDto } from './dto/charge-query.dto';
 import { PrismaService } from '../../database/prisma.service';
+import { ChargeService } from './charge.service';
+import { LedgerService } from './ledger.service';
 import {
   FinancialLedger,
   RentCharge,
@@ -21,6 +23,8 @@ export class AccountingService {
   constructor(
     private readonly accountingRepository: AccountingRepository,
     private readonly prisma: PrismaService,
+    private readonly chargeService: ChargeService,
+    private readonly ledgerService: LedgerService,
   ) {}
 
   /**
@@ -195,59 +199,13 @@ export class AccountingService {
       throw new ForbiddenException('Tenants are not authorized to create charges.');
     }
 
-    const ledgerType =
-      dto.type === ChargeType.SECURITY_DEPOSIT ? LedgerType.TRUST : LedgerType.OPERATING;
-
-    return this.prisma.$transaction(async (tx) => {
-      let ledger = await tx.financialLedger.findFirst({
-        where: { leaseId: dto.leaseId, ledgerType },
-      });
-
-      if (!ledger) {
-        ledger = await tx.financialLedger.create({
-          data: {
-            leaseId: dto.leaseId,
-            ledgerType,
-            runningBalance: new Prisma.Decimal(0.00),
-          },
-        });
-      }
-
-      const chargeAmount = new Prisma.Decimal(dto.amount);
-      const oldBalance = ledger.runningBalance;
-      const newBalance = oldBalance.plus(chargeAmount);
-
-      const charge = await tx.rentCharge.create({
-        data: {
-          ledgerId: ledger.id,
-          dueDate: new Date(dto.dueDate),
-          type: dto.type,
-          amount: chargeAmount,
-          paidAmount: new Prisma.Decimal(0.00),
-          status: ChargeStatus.UNPAID,
-          description: dto.description,
-        },
-      });
-
-      await tx.financialLedger.update({
-        where: { id: ledger.id },
-        data: {
-          runningBalance: newBalance,
-        },
-      });
-
-      await tx.ledgerBalanceHistory.create({
-        data: {
-          ledgerId: ledger.id,
-          oldBalance,
-          newBalance,
-          triggerEventType: LedgerTriggerEvent.CHARGE,
-          triggerEventId: charge.id,
-        },
-      });
-
-      return charge;
-    });
+    return await this.chargeService.createOneOffCharge(
+      dto.leaseId,
+      dto.type,
+      new Prisma.Decimal(dto.amount),
+      new Date(dto.dueDate),
+      dto.description
+    );
   }
 
   /**
@@ -329,45 +287,11 @@ export class AccountingService {
 
     await this.accountingRepository.validateLeaseAccess(charge.ledger.leaseId, user);
 
-    if (charge.status === ChargeStatus.VOIDED) {
-      throw new BadRequestException('Charge is already voided.');
-    }
-
-    if (charge.status === ChargeStatus.PAID || charge.status === ChargeStatus.PARTIALLY_PAID) {
-      throw new BadRequestException('Cleared or partially cleared charges cannot be voided. Corrections require adjustments.');
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      const updatedCharge = await tx.rentCharge.update({
-        where: { id: chargeId },
-        data: { status: ChargeStatus.VOIDED },
-      });
-
-      const oldBalance = charge.ledger.runningBalance;
-      const newBalance = oldBalance.minus(charge.amount);
-
-      await tx.financialLedger.update({
-        where: { id: charge.ledgerId },
-        data: { runningBalance: newBalance },
-      });
-
-      await tx.ledgerBalanceHistory.create({
-        data: {
-          ledgerId: charge.ledgerId,
-          oldBalance,
-          newBalance,
-          triggerEventType: LedgerTriggerEvent.VOID,
-          triggerEventId: chargeId,
-        },
-      });
-
-      return updatedCharge;
-    });
+    return await this.chargeService.voidCharge(chargeId);
   }
 
   /**
-   * Applies credit adjustments to a charge using immutable balance history corrections,
-   * without creating any Payment records.
+   * Applies credit adjustments to a charge without creating any Payment records.
    */
   async adjustCharge(
     chargeId: string,
@@ -385,55 +309,7 @@ export class AccountingService {
 
     await this.accountingRepository.validateLeaseAccess(charge.ledger.leaseId, user);
 
-    if (charge.status === ChargeStatus.VOIDED) {
-      throw new BadRequestException('Cannot adjust a voided charge.');
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      const adjustmentAmount = new Prisma.Decimal(dto.amount);
-
-      // 1. Fetch current ledger balance and adjust the balance downward (Credit adjustment)
-      const ledger = await tx.financialLedger.findUniqueOrThrow({
-        where: { id: charge.ledgerId },
-      });
-
-      const oldBalance = ledger.runningBalance;
-      const newBalance = oldBalance.minus(adjustmentAmount);
-
-      await tx.financialLedger.update({
-        where: { id: ledger.id },
-        data: { runningBalance: newBalance },
-      });
-
-      // 2. Log adjustment in LedgerBalanceHistory using VOID event type
-      await tx.ledgerBalanceHistory.create({
-        data: {
-          ledgerId: ledger.id,
-          oldBalance,
-          newBalance,
-          triggerEventType: LedgerTriggerEvent.VOID,
-          triggerEventId: chargeId,
-        },
-      });
-
-      // 3. For non-cleared charges, we reduce the outstanding amount to apply the credit
-      let updatedCharge = charge;
-      if (charge.status !== ChargeStatus.PAID) {
-        const remaining = charge.amount.minus(charge.paidAmount);
-        const deduction = Prisma.Decimal.min(remaining, adjustmentAmount);
-        const newAmount = charge.amount.minus(deduction);
-
-        updatedCharge = await tx.rentCharge.update({
-          where: { id: chargeId },
-          data: {
-            amount: newAmount,
-            status: newAmount.equals(charge.paidAmount) ? ChargeStatus.PAID : charge.status,
-          },
-        });
-      }
-
-      return updatedCharge;
-    });
+    return await this.chargeService.updateChargeAmount(chargeId, new Prisma.Decimal(dto.amount));
   }
 
   /**
@@ -479,70 +355,17 @@ export class AccountingService {
     startDate: Date,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const opLedger = await tx.financialLedger.create({
-        data: {
-          leaseId,
-          ledgerType: LedgerType.OPERATING,
-          runningBalance: new Prisma.Decimal(0.00),
-        },
-      });
-
-      await tx.ledgerBalanceHistory.create({
-        data: {
-          ledgerId: opLedger.id,
-          oldBalance: new Prisma.Decimal(0.00),
-          newBalance: new Prisma.Decimal(0.00),
-          triggerEventType: LedgerTriggerEvent.CHARGE,
-          triggerEventId: leaseId,
-        },
-      });
-
-      const trustLedger = await tx.financialLedger.create({
-        data: {
-          leaseId,
-          ledgerType: LedgerType.TRUST,
-          runningBalance: new Prisma.Decimal(0.00),
-        },
-      });
-
-      await tx.ledgerBalanceHistory.create({
-        data: {
-          ledgerId: trustLedger.id,
-          oldBalance: new Prisma.Decimal(0.00),
-          newBalance: new Prisma.Decimal(0.00),
-          triggerEventType: LedgerTriggerEvent.CHARGE,
-          triggerEventId: leaseId,
-        },
-      });
+      await this.ledgerService.createLedgersForLease(leaseId, tx);
 
       if (securityDeposit && new Prisma.Decimal(securityDeposit).gt(0)) {
-        const depositAmount = new Prisma.Decimal(securityDeposit);
-        const depositCharge = await tx.rentCharge.create({
-          data: {
-            ledgerId: trustLedger.id,
-            dueDate: startDate,
-            type: ChargeType.SECURITY_DEPOSIT,
-            amount: depositAmount,
-            paidAmount: new Prisma.Decimal(0.00),
-            status: ChargeStatus.UNPAID,
-            description: 'Initial Security Deposit Requirement',
-          },
-        });
-
-        await tx.financialLedger.update({
-          where: { id: trustLedger.id },
-          data: { runningBalance: depositAmount },
-        });
-
-        await tx.ledgerBalanceHistory.create({
-          data: {
-            ledgerId: trustLedger.id,
-            oldBalance: new Prisma.Decimal(0.00),
-            newBalance: depositAmount,
-            triggerEventType: LedgerTriggerEvent.CHARGE,
-            triggerEventId: depositCharge.id,
-          },
-        });
+        await this.chargeService.createOneOffCharge(
+          leaseId,
+          ChargeType.SECURITY_DEPOSIT,
+          new Prisma.Decimal(securityDeposit),
+          startDate,
+          'Initial Security Deposit Requirement',
+          tx
+        );
       }
     });
   }
