@@ -1,0 +1,164 @@
+{
+  "sections": [
+    {
+      "id": "parties",
+      "title": "Parties & date",
+      "fields": [
+        { "id": "agreement_date", "label": "Agreement date", "type": "date", "required": true },
+        { "id": "landlord_name", "label": "Landlord full name", "type": "text", "required": true },
+        { "id": "landlord_address", "label": "Landlord mailing address", "type": "text", "required": true },
+        { "id": "tenant_name", "label": "Tenant full name", "type": "text", "required": true },
+        { "id": "tenant_contact", "label": "Tenant phone/email", "type": "text", "required": true }
+      ]
+    },
+    {
+      "id": "property",
+      "title": "Property",
+      "fields": [
+        { "id": "property_address", "label": "Full property address, unit #", "type": "text", "required": true },
+        { "id": "included_items", "label": "Included items (parking, furniture, appliances, storage)", "type": "textarea", "required": false }
+      ]
+    },
+    {
+      "id": "term",
+      "title": "Term",
+      "fields": [
+        { "id": "start_date", "label": "Start date", "type": "date", "required": true },
+        { "id": "end_date", "label": "End date", "type": "date", "required": true },
+        {
+          "id": "renewal_type",
+          "label": "At end of term",
+          "type": "radio",
+          "required": true,
+          "options": [
+            { "value": "auto", "label": "Auto-converts to month-to-month" },
+            { "value": "fixed", "label": "Ends automatically, no renewal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rent",
+      "title": "Rent",
+      "fields": [
+        { "id": "rent_amount", "label": "Monthly/total rent amount", "type": "currency", "required": true },
+        { "id": "rent_due_date", "label": "Due date (e.g. 1st of each month)", "type": "text", "required": true },
+        { "id": "payment_methods", "label": "Accepted payment method(s)", "type": "text", "required": true },
+        { "id": "late_fee_amount", "label": "Late fee", "type": "currency", "required": false },
+        { "id": "late_fee_grace_days", "label": "Grace period (days)", "type": "number", "required": false }
+      ]
+    },
+    {
+      "id": "deposit",
+      "title": "Security deposit",
+      "fields": [
+        { "id": "deposit_amount", "label": "Deposit amount", "type": "currency", "required": true },
+        { "id": "deposit_return_conditions", "label": "Conditions for return", "type": "textarea", "required": false },
+        { "id": "deposit_return_days", "label": "Return timeline after move-out (days)", "type": "number", "required": false }
+      ]
+    },
+    {
+      "id": "utilities",
+      "title": "Utilities & services",
+      "fields": [
+        { "id": "tenant_utilities", "label": "Tenant responsible for", "type": "text", "required": false },
+        { "id": "landlord_utilities", "label": "Landlord responsible for", "type": "text", "required": false }
+      ]
+    },
+    {
+      "id": "occupants",
+      "title": "Occupants & pets",
+      "fields": [
+        { "id": "approved_occupants", "label": "Approved occupants (names)", "type": "textarea", "required": false },
+        {
+          "id": "pets_allowed",
+          "label": "Pets allowed",
+          "type": "radio",
+          "required": true,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        { "id": "pet_details", "label": "Pet details (type/size/deposit)", "type": "text", "required": false, "show_if": { "field": "pets_allowed", "equals": "yes" } }
+      ]
+    },
+    {
+      "id": "use",
+      "title": "Use of property",
+      "fields": [
+        {
+          "id": "subletting",
+          "label": "Subletting",
+          "type": "radio",
+          "required": true,
+          "options": [
+            { "value": "allowed", "label": "Allowed with written consent" },
+            { "value": "not_allowed", "label": "Not allowed" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintenance",
+      "title": "Maintenance & repairs",
+      "fields": [
+        { "id": "landlord_maintenance", "label": "Landlord responsible for", "type": "textarea", "required": false },
+        { "id": "tenant_maintenance", "label": "Tenant responsible for", "type": "textarea", "required": false }
+      ]
+    },
+    {
+      "id": "entry",
+      "title": "Entry by landlord",
+      "fields": [
+        {
+          "id": "entry_notice_hours",
+          "label": "Notice required",
+          "type": "select",
+          "required": true,
+          "options": [
+            { "value": "24", "label": "24 hours" },
+            { "value": "48", "label": "48 hours" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "termination",
+      "title": "Termination",
+      "fields": [
+        { "id": "termination_notice_days", "label": "Written notice required (days)", "type": "number", "required": true },
+        { "id": "early_termination_fee", "label": "Early termination fee", "type": "currency", "required": false }
+      ]
+    },
+    {
+      "id": "rules",
+      "title": "Rules & conduct",
+      "fields": [
+        {
+          "id": "no_smoking",
+          "label": "No smoking",
+          "type": "radio",
+          "required": true,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        { "id": "quiet_hours", "label": "Noise/quiet hours", "type": "text", "required": false },
+        { "id": "other_rules", "label": "Other rules", "type": "textarea", "required": false }
+      ]
+    },
+    {
+      "id": "additional",
+      "title": "Additional terms",
+      "fields": [
+        { "id": "additional_terms", "label": "Custom clauses", "type": "textarea", "required": false }
+      ]
+    }
+  ],
+  "signature_fields": {
+    "note": "These are NOT part of the fill-in form. They're populated by the e-signature action itself, not by the admin/landlord form — see notes below.",
+    "fields": ["landlord_signature", "landlord_signed_date", "tenant_signature", "tenant_signed_date"]
+  }
+}

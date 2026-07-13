@@ -1,0 +1,300 @@
+<USER_REQUEST>
+Attached: lease-field-schema.json and lease-template-tokenized.md.
+
+Before writing anything: check package.json (root and apps/api) for any existing templating 
+engine (Handlebars, Mustache, EJS, etc.) or PDF generation library (Puppeteer, pdf-lib, etc.). 
+Tell me what's already installed before adding any new dependency.
+
+Then implement, scoped to Lease and Document/LeaseDocument only — do not touch accounting:
+
+1. A form schema endpoint: expose lease-field-schema.json's sections/fields as-is via a GET 
+   endpoint (e.g. GET /v1/leases/field-schema) so the frontend can build the form dynamically 
+   from it later. Do not hardcode form fields anywhere in backend or frontend.
+
+2. A render/merge function: given a Lease's typed columns (monthlyRent, startDate, endDate, 
+   rentDueDay, gracePeriodDays, renewalType) plus its leaseTermsJson (the narrative fields — 
+   included_items, payment_methods, pets, subletting, maintenance, entry notice, termination 
+   notice, house rules, additional_terms, etc., matching the field schema's shape) and the 
+   lease's parties (landlord via unit.landlord, tenants via leaseTenants), merge these into 
+   lease-template-tokenized.md's tokens. Convert the {{#eq field "value"}}x{{/eq}} pseudocode 
+   into whatever conditional syntax the chosen templating engine actually uses.
+
+3. Signature fields (landlord_signature, landlord_signed_date, tenant_signature, 
+   tenant_signed_date) are explicitly NOT part of this merge step — they populate only from 
+   LeaseTenant.signedAt (already in schema) and a landlord-side equivalent. Check: does Lease 
+   or Unit currently have any field for landlord signature/signedAt? If not, tell me before 
+   adding one — this is a schema decision, not something to invent silently.
+
+4. PDF conversion: convert the merged markdown/HTML to PDF. Tell me what's available in the 
+   environment before choosing a library.
+
+5. Storage: save the generated PDF as a new Document (category LEASE_AGREEMENT) + 
+   LeaseDocument row, using the LeaseDocumentPurpose we already built (DRAFT_PREVIEW while 
+   pending landlord/tenant, TENANT_SIGNATURE_COPY once sent to tenant for signing, EXECUTED 
+   once ACTIVE). Trigger regeneration (new Document version via previousDocumentId) whenever 
+   the lease's editable fields change pre-signature, and generate the EXECUTED copy at the 
+   moment signLease() successfully activates the lease (hook into LeaseStatusService's 
+   signLease(), not a separate untracked call site).
+
+Show me your findings on points 1, 3, and 4 (existing libraries, missing landlord signature 
+field) before writing any implementation code. Do not guess on the PDF library or the 
+signature field — report back first.
+
+
+lease-field-schema.json:-
+{
+  "sections": [
+    {
+      "id": "parties",
+      "title": "Parties & date",
+      "fields": [
+        { "id": "agreement_date", "label": "Agreement date", "type": "date", "required": true },
+        { "id": "landlord_name", "label": "Landlord full name", "type": "text", "required": true },
+        { "id": "landlord_address", "label": "Landlord mailing address", "type": "text", "required": true },
+        { "id": "tenant_name", "label": "Tenant full name", "type": "text", "required": true },
+        { "id": "tenant_contact", "label": "Tenant phone/email", "type": "text", "required": true }
+      ]
+    },
+    {
+      "id": "property",
+      "title": "Property",
+      "fields": [
+        { "id": "property_address", "label": "Full property address, unit #", "type": "text", "required": true },
+        { "id": "included_items", "label": "Included items (parking, furniture, appliances, storage)", "type": "textarea", "required": false }
+      ]
+    },
+    {
+      "id": "term",
+      "title": "Term",
+      "fields": [
+        { "id": "start_date", "label": "Start date", "type": "date", "required": true },
+        { "id": "end_date", "label": "End date", "type": "date", "required": true },
+        {
+          "id": "renewal_type",
+          "label": "At end of term",
+          "type": "radio",
+          "required": true,
+          "options": [
+            { "value": "auto", "label": "Auto-converts to month-to-month" },
+            { "value": "fixed", "label": "Ends automatically, no renewal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rent",
+      "title": "Rent",
+      "fields": [
+        { "id": "rent_amount", "label": "Monthly/total rent amount", "type": "currency", "required": true },
+        { "id": "rent_due_date", "label": "Due date (e.g. 1st of each month)", "type": "text", "required": true },
+        { "id": "payment_methods", "label": "Accepted payment method(s)", "type": "text", "required": true },
+        { "id": "late_fee_amount", "label": "Late fee", "type": "currency", "required": false },
+        { "id": "late_fee_grace_days", "label": "Grace period (days)", "type": "number", "required": false }
+      ]
+    },
+    {
+      "id": "deposit",
+      "title": "Security deposit",
+      "fields": [
+        { "id": "deposit_amount", "label": "Deposit amount", "type": "currency", "required": true },
+        { "id": "deposit_return_conditions", "label": "Conditions for return", "type": "textarea", "required": false },
+        { "id": "deposit_return_days", "label": "Return timeline after move-out (days)", "type": "number", "required": false }
+      ]
+    },
+    {
+      "id": "utilities",
+      "title": "Utilities & services",
+      "fields": [
+        { "id": "tenant_utilities", "label": "Tenant responsible for", "type": "text", "required": false },
+        { "id": "landlord_utilities", "label": "Landlord responsible for", "type": "text", "required": false }
+      ]
+    },
+    {
+      "id": "occupants",
+      "title": "Occupants & pets",
+      "fields": [
+        { "id": "approved_occupants", "label": "Approved occupants (names)", "type": "textarea", "required": false },
+        {
+          "id": "pets_allowed",
+          "label": "Pets allowed",
+          "type": "radio",
+          "required": true,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        { "id": "pet_details", "label": "Pet details (type/size/deposit)", "type": "text", "required": false, "show_if": { "field": "pets_allowed", "equals": "yes" } }
+      ]
+    },
+    {
+      "id": "use",
+      "title": "Use of property",
+      "fields": [
+        {
+          "id": "subletting",
+          "label": "Subletting",
+          "type": "radio",
+          "required": true,
+          "options": [
+            { "value": "allowed", "label": "Allowed with written consent" },
+            { "value": "not_allowed", "label": "Not allowed" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintenance",
+      "title": "Maintenance & repairs",
+      "fields": [
+        { "id": "landlord_maintenance", "label": "Landlord responsible for", "type": "textarea", "required": false },
+        { "id": "tenant_maintenance", "label": "Tenant responsible for", "type": "textarea", "required": false }
+      ]
+    },
+    {
+      "id": "entry",
+      "title": "Entry by landlord",
+      "fields": [
+        {
+          "id": "entry_notice_hours",
+          "label": "Notice required",
+          "type": "select",
+          "required": true,
+          "options": [
+            { "value": "24", "label": "24 hours" },
+            { "value": "48", "label": "48 hours" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "termination",
+      "title": "Termination",
+      "fields": [
+        { "id": "termination_notice_days", "label": "Written notice required (days)", "type": "number", "required": true },
+        { "id": "early_termination_fee", "label": "Early termination fee", "type": "currency", "required": false }
+      ]
+    },
+    {
+      "id": "rules",
+      "title": "Rules & conduct",
+      "fields": [
+        {
+          "id": "no_smoking",
+          "label": "No smoking",
+          "type": "radio",
+          "required": true,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        { "id": "quiet_hours", "label": "Noise/quiet hours", "type": "text", "required": false },
+        { "id": "other_rules", "label": "Other rules", "type": "textarea", "required": false }
+      ]
+    },
+    {
+      "id": "additional",
+      "title": "Additional terms",
+      "fields": [
+        { "id": "additional_terms", "label": "Custom clauses", "type": "textarea", "required": false }
+      ]
+    }
+  ],
+  "signature_fields": {
+    "note": "These are NOT part of the fill-in form. They're populated by the e-signature action itself, not by the admin/landlord form — see notes below.",
+    "fields": ["landlord_signature", "landlord_signed_date", "tenant_signature", "tenant_signed_date"]
+  }
+}
+
+
+lease-template-tokenized.md
+# Temporary (Short-Term) Lease Agreement
+
+**This Lease Agreement ("Agreement")** is made and entered into on {{agreement_date}}, by and between:
+
+**Landlord:** {{landlord_name}}, residing at/with mailing address {{landlord_address}}
+("Landlord")
+
+**Tenant:** {{tenant_name}}, with contact info {{tenant_contact}}
+("Tenant")
+
+---
+
+## 1. Property
+Landlord agrees to rent to Tenant the property located at:
+{{property_address}}
+
+Included with the property: {{included_items}}
+
+## 2. Term
+This is a **temporary/short-term lease** beginning on **{{start_date}}** and ending on **{{end_date}}**.
+[{{#eq renewal_type "auto"}}x{{/eq}}] This lease automatically converts to month-to-month if not renewed or terminated.
+[{{#eq renewal_type "fixed"}}x{{/eq}}] This lease ends automatically on the end date with no renewal.
+
+## 3. Rent
+- Monthly/Total rent amount: **${{rent_amount}}**
+- Due date: {{rent_due_date}}
+- Payment method(s): {{payment_methods}}
+- Late fee: ${{late_fee_amount}} after {{late_fee_grace_days}} day grace period
+
+## 4. Security Deposit
+- Deposit amount: **${{deposit_amount}}**
+- Conditions for return: {{deposit_return_conditions}}
+- Timeline for return after move-out: {{deposit_return_days}} days
+
+## 5. Utilities & Services
+Tenant responsible for: {{tenant_utilities}}
+Landlord responsible for: {{landlord_utilities}}
+
+## 6. Occupants & Pets
+- Approved occupants: {{approved_occupants}}
+- Pets allowed: [{{#eq pets_allowed "yes"}}x{{/eq}}] Yes [{{#eq pets_allowed "no"}}x{{/eq}}] No — Details: {{pet_details}}
+
+## 7. Use of Property
+- Tenant agrees to use the property solely as a residence.
+- Subletting: [{{#eq subletting "allowed"}}x{{/eq}}] Allowed with written consent [{{#eq subletting "not_allowed"}}x{{/eq}}] Not allowed
+
+## 8. Maintenance & Repairs
+- Landlord responsible for: {{landlord_maintenance}}
+- Tenant responsible for: {{tenant_maintenance}}
+
+## 9. Entry by Landlord
+Landlord may enter with **{{entry_notice_hours}}** hours notice, except in emergencies.
+
+## 10. Termination
+- Either party may terminate with **{{termination_notice_days}}** days written notice.
+- Early termination fee (if applicable): ${{early_termination_fee}}
+
+## 11. Rules & Conduct
+- No smoking: [{{#eq no_smoking "yes"}}x{{/eq}}] Yes [{{#eq no_smoking "no"}}x{{/eq}}] No
+- Noise/quiet hours: {{quiet_hours}}
+- Other rules: {{other_rules}}
+
+## 12. Additional Terms
+{{additional_terms}}
+
+## 13. Signatures
+
+Landlord Signature: {{landlord_signature}} Date: {{landlord_signed_date}}
+
+Tenant Signature: {{tenant_signature}} Date: {{tenant_signed_date}}
+
+---
+*This is a general template for informational purposes and may not meet all legal requirements in your state/country. Have it reviewed by a local attorney before use, and add any legally required disclosures for your jurisdiction (e.g., lead paint, mold, security deposit limits).*
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-07-08T22:03:00+05:30.
+
+The user's current state is as follows:
+Active Document: /Users/harshallahoti/Documents/Property Management System/apps/api/src/modules/lease/test/lease-status.service.spec.ts (LANGUAGE_TYPESCRIPT)
+Cursor is on line: 1
+Other open documents:
+- /Users/harshallahoti/Documents/Property Management System/apps/api/prisma/schema.prisma (LANGUAGE_UNSPECIFIED)
+- /Users/harshallahoti/Documents/Property Management System/apps/api/prisma/migrations/20260708105500_lease_workflow_tristate_v2/migration.sql (LANGUAGE_SQL)
+- /Users/harshallahoti/Documents/Property Management System/apps/api/src/modules/lease/test/lease.service.spec.ts (LANGUAGE_TYPESCRIPT)
+- /Users/harshallahoti/Documents/Property Management System/apps/api/test-service.ts (LANGUAGE_TYPESCRIPT)
+- /Users/harshallahoti/Documents/Property Management System/apps/api/src/modules/lease/test/lease-status.service.spec.ts (LANGUAGE_TYPESCRIPT)
+No browser pages are currently open.
+</ADDITIONAL_METADATA>

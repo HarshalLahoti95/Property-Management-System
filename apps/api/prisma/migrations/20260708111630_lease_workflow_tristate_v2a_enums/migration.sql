@@ -1,0 +1,17 @@
+-- CreateEnum
+CREATE TYPE "LeaseRenewalType" AS ENUM ('AUTO_MONTH_TO_MONTH', 'FIXED_END');
+
+-- CreateEnum
+CREATE TYPE "LeaseDocumentPurpose" AS ENUM ('DRAFT_PREVIEW', 'TENANT_SIGNATURE_COPY', 'EXECUTED');
+
+-- AlterEnum
+ALTER TYPE "LeaseStatus" ADD VALUE 'REJECTED';
+ALTER TYPE "LeaseStatus" ADD VALUE 'CANCELLED';
+ALTER TYPE "LeaseStatus" ADD VALUE 'DECLINED';
+
+-- AlterEnum
+ALTER TYPE "LeaseTenantStatus" ADD VALUE 'PENDING';
+ALTER TYPE "LeaseTenantStatus" ADD VALUE 'DECLINED';
+
+-- AlterEnum
+ALTER TYPE "UnitOccupancyStatus" ADD VALUE 'RESERVED';

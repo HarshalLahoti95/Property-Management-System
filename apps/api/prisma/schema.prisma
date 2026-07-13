@@ -1,0 +1,726 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String                   @id @default(uuid())
+  email                 String                   @unique
+  fullName              String
+  phone                 String
+  role                  UserRole
+  status                UserStatus
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  deletedAt             DateTime?
+  mailingAddress        String?
+  leasesCreated         Lease[]                  @relation("LeaseCreatedBy")
+  leaseStatusHistories  LeaseStatusHistory[]     @relation("UserLeaseStatusHistory")
+  disbursementsRecorded Disbursement[]           @relation("DisbursementRecordedBy")
+  percentageHistoriesChanged LeaseSharePercentageHistory[] @relation("PercentageHistoryChangedBy")
+  companyDeductionsRecorded CompanyMaintenanceDeduction[] @relation("DeductionRecordedBy")
+  leaseTenants          LeaseTenant[]            @relation("TenantLeases")
+  notifications         NotificationHistory[]
+  otpRequests           OtpRequest[]
+  passwordCredential    PasswordCredential?
+  payments              Payment[]                @relation("TenantPayments")
+  units                 Unit[]                   @relation("LandlordUnits")
+  userDocuments         UserDocument[]
+  userPreference        UserPreference?
+  workOrderComments     WorkOrderComment[]
+  statusChangeHistories WorkOrderStatusHistory[] @relation("UserStatusHistory")
+
+  @@index([role, status])
+}
+
+model PasswordCredential {
+  userId       String   @id
+  passwordHash String
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OtpRequest {
+  id            String    @id @default(uuid())
+  userId        String
+  codeHash      String
+  status        OtpStatus
+  expiresAt     DateTime
+  attemptsCount Int       @default(0)
+  createdAt     DateTime  @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+model Property {
+  id                      String          @id @default(uuid())
+  name                    String
+  type                    PropertyType
+  layout                  PropertyLayout  @default(MULTI_UNIT)
+  streetAddress           String
+  city                    String
+  state                   String
+  zipCode                 String
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  deletedAt               DateTime?
+  deletionRequestedByRole UserRole?
+  deletionStatus          DeletionStatus?
+  units                   Unit[]
+  workOrders              WorkOrder[]
+
+  @@unique([streetAddress, city, state, zipCode])
+  @@index([state, city])
+}
+
+/// DELETION GUARD (application logic): a Unit should not be allowed to enter
+/// the deletionStatus approval flow while it has any Lease in a non-terminal
+/// status (i.e. occupancyStatus != VACANT).
+model Unit {
+  id                      String              @id @default(uuid())
+  propertyId              String
+  landlordId              String
+  unitNumber              String
+  floorLevel              Int
+  bedCount                Int
+  bathCount               Int
+  squareFootage           Int
+  targetRent              Decimal             @db.Decimal(18, 2)
+  occupancyStatus         UnitOccupancyStatus
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  deletedAt               DateTime?
+  deletionRequestedByRole UserRole?
+  deletionStatus          DeletionStatus?
+  leases                  Lease[]
+  landlord                User                @relation("LandlordUnits", fields: [landlordId], references: [id])
+  property                Property            @relation(fields: [propertyId], references: [id])
+  workOrders              WorkOrder[]
+
+  @@unique([propertyId, unitNumber])
+  @@index([propertyId])
+  @@index([landlordId])
+  @@index([occupancyStatus])
+}
+
+/// BUSINESS CONSTRAINTS:
+/// - Enforced in PostgreSQL Migration: None (Prisma/SQL standard unique indexes cannot validate date ranges).
+/// - Enforced in Application Logic: Only one ACTIVE lease per unit at any given date. Prior to activating a lease (status -> ACTIVE), application queries must verify that no other active lease overlaps with the lease's [startDate, endDate] interval.
+/// - Enforced in Application Logic: Only one non-terminal lease (DRAFT / PENDING_LANDLORD_APPROVAL / PENDING_TENANT_SIGNATURE / ACTIVE / PENDING_TERMINATION_APPROVAL) may exist per unit at a time. Unit.occupancyStatus is the derived signal for this — keep it in sync on every Lease.status transition, in one shared code path, not re-implemented per endpoint.
+/// - LANDLORD DERIVATION: the landlord for a lease is derived from Unit.landlordId directly. (Corrected — a prior version of this comment incorrectly described a Unit -> Property -> landlordId path; Property has no landlordId field.)
+/// - ACTIVATION RULE: status transitions to ACTIVE only once every LeaseTenant with status != REMOVED has status == ACTIVE (i.e. has signed). If any LeaseTenant transitions to DECLINED, the Lease itself must transition to DECLINED.
+/// - EXPIRATION: driven by a scheduled job comparing endDate against now for all ACTIVE leases — not a passive check-on-read. If a lease is PENDING_TERMINATION_APPROVAL when its endDate arrives, expiration takes precedence and the pending termination request is closed out as moot.
+/// - RENEWAL: renewalType == AUTO_MONTH_TO_MONTH changes what should happen at endDate — this business logic is not yet implemented and needs an explicit decision before the expiration job is built.
+model Lease {
+  id                   String               @id @default(uuid())
+  unitId               String
+  startDate            DateTime
+  endDate              DateTime
+  monthlyRent          Decimal              @db.Decimal(18, 2)
+  securityDeposit      Decimal              @db.Decimal(18, 2)
+  rentDueDay           Int
+  gracePeriodDays      Int
+  status               LeaseStatus
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  deletedAt            DateTime?
+  createdByRole        UserRole             @default(LANDLORD)
+  createdByUserId      String?
+  leaseTermsJson       Json?
+  renewalType          LeaseRenewalType     @default(FIXED_END)
+  financialLedgers     FinancialLedger[]
+  createdByUser        User?                @relation("LeaseCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  unit                 Unit                 @relation(fields: [unitId], references: [id])
+  leaseDocuments       LeaseDocument[]
+  leaseStatusHistories LeaseStatusHistory[] @relation("LeaseStatusHistoryTrack")
+  rentCharges          RentCharge[]
+  payments             Payment[]
+  sharePercentageHistories LeaseSharePercentageHistory[]
+  chargeSplitRules     ChargeSplitRule[]
+  disbursements        Disbursement[]
+  companyMaintenanceDeductions CompanyMaintenanceDeduction[]
+  accountingConfig     LeaseAccountingConfig?
+  leaseTenants         LeaseTenant[]
+
+  @@index([unitId])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@index([createdByUserId])
+}
+
+model LeaseTenant {
+  id         String            @id @default(uuid())
+  leaseId    String
+  tenantId   String
+  status     LeaseTenantStatus @default(PENDING)
+  joinedAt   DateTime          @default(now())
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  declinedAt DateTime?
+  signedAt   DateTime?
+  lease      Lease             @relation(fields: [leaseId], references: [id])
+  tenant     User              @relation("TenantLeases", fields: [tenantId], references: [id])
+
+  @@unique([leaseId, tenantId])
+  @@index([tenantId])
+}
+
+// ==========================================
+// DOUBLE ENTRY TRUST LEDGER SYSTEM (REBUILT)
+// ==========================================
+
+model FinancialLedger {
+  id             String     @id @default(uuid())
+  leaseId        String
+  ledgerType     LedgerType
+  runningBalance Decimal    @default(0.00) @db.Decimal(18, 2)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  lease                  Lease                  @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  rentCharges            RentCharge[]
+  payments               Payment[]
+  ledgerBalanceHistories LedgerBalanceHistory[]
+
+  @@unique([leaseId, ledgerType])
+  @@index([leaseId])
+}
+
+model RentCharge {
+  id           String       @id @default(uuid())
+  ledgerId     String
+  leaseId      String
+  billingMonth DateTime
+  type         ChargeType
+  amount       Decimal      @db.Decimal(18, 2)
+  paidAmount   Decimal      @default(0.00) @db.Decimal(18, 2)
+  status       ChargeStatus
+  dueDate      DateTime
+  description  String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  ledger             FinancialLedger     @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  lease              Lease               @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  paymentAllocations PaymentAllocation[]
+
+  @@index([ledgerId])
+  @@index([leaseId, status])
+  @@index([billingMonth])
+  @@index([dueDate])
+}
+
+model Payment {
+  id                   String        @id @default(uuid())
+  ledgerId             String
+  leaseId              String
+  tenantId             String
+  billingMonth         DateTime
+  amount               Decimal       @db.Decimal(18, 2)
+  paymentMethod        PaymentMethod
+  transactionReference String        @unique
+  status               PaymentStatus
+  paymentDate          DateTime
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  ledger             FinancialLedger     @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  lease              Lease               @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  tenant             User                @relation("TenantPayments", fields: [tenantId], references: [id], onDelete: Restrict)
+  paymentAllocations PaymentAllocation[]
+
+  @@unique([leaseId, billingMonth])
+  @@index([ledgerId])
+  @@index([leaseId])
+  @@index([tenantId])
+}
+
+model PaymentAllocation {
+  id                  String   @id @default(uuid())
+  paymentId           String
+  rentChargeId        String
+  landlordShareAmount Decimal  @db.Decimal(18, 2)
+  companyShareAmount  Decimal  @db.Decimal(18, 2)
+  allocatedAt         DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  payment    Payment    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  rentCharge RentCharge @relation(fields: [rentChargeId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, rentChargeId])
+  @@index([paymentId])
+  @@index([rentChargeId])
+}
+
+model LedgerBalanceHistory {
+  id               String             @id @default(uuid())
+  ledgerId         String
+  oldBalance       Decimal            @db.Decimal(18, 2)
+  newBalance       Decimal            @db.Decimal(18, 2)
+  triggerEventType LedgerTriggerEvent
+  triggerEventId   String
+  changedAt        DateTime           @default(now())
+
+  ledger FinancialLedger @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+
+  @@index([ledgerId])
+}
+
+model LeaseSharePercentageHistory {
+  id                      String   @id @default(uuid())
+  leaseId                 String
+  landlordSharePercentage Decimal  @db.Decimal(5, 2)
+  effectiveFrom           DateTime
+  changedByUserId         String
+  createdAt               DateTime @default(now())
+
+  lease         Lease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  changedByUser User  @relation("PercentageHistoryChangedBy", fields: [changedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId])
+  @@index([changedByUserId])
+  @@index([effectiveFrom])
+}
+
+model ChargeSplitRule {
+  id                      String     @id @default(uuid())
+  leaseId                 String
+  chargeType              ChargeType
+  landlordSharePercentage Decimal    @db.Decimal(5, 2)
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+
+  @@unique([leaseId, chargeType])
+  @@index([leaseId])
+}
+
+model Disbursement {
+  id               String             @id @default(uuid())
+  leaseId          String
+  amount           Decimal            @db.Decimal(18, 2)
+  method           DisbursementMethod
+  status           DisbursementStatus
+  reference        String?
+  recordedByUserId String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  lease          Lease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  recordedByUser User  @relation("DisbursementRecordedBy", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId])
+  @@index([recordedByUserId])
+}
+
+model CompanyMaintenanceDeduction {
+  id               String   @id @default(uuid())
+  leaseId          String
+  workOrderId      String
+  amount           Decimal  @db.Decimal(18, 2)
+  deductionMonth   DateTime
+  recordedByUserId String
+  createdAt        DateTime @default(now())
+
+  lease          Lease     @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  workOrder      WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  recordedByUser User      @relation("DeductionRecordedBy", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId])
+  @@index([workOrderId])
+  @@index([recordedByUserId])
+}
+
+model LeaseAccountingConfig {
+  id                     String   @id @default(uuid())
+  leaseId                String   @unique
+  tenantGracePeriodDays  Int      @default(0)
+  companyGracePeriodDays Int      @default(0)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+}
+
+model Vendor {
+  id                String                   @id @default(uuid())
+  companyName       String
+  contactName       String
+  serviceCategory   String
+  email             String                   @unique
+  phone             String
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  deletedAt         DateTime?
+  workOrders        WorkOrder[]
+  assignedHistories WorkOrderStatusHistory[] @relation("AssignedVendorHistory")
+  previousHistories WorkOrderStatusHistory[] @relation("PreviousVendorHistory")
+
+  @@index([serviceCategory])
+}
+
+model WorkOrder {
+  id                   String                   @id @default(uuid())
+  propertyId           String
+  unitId               String?
+  vendorId             String?
+  workOrderNumber      String                   @unique
+  title                String
+  description          String
+  priority             WorkOrderPriority
+  status               WorkOrderStatus
+  estimatedCost        Decimal?                 @db.Decimal(18, 2)
+  actualCost           Decimal?                 @db.Decimal(18, 2)
+  targetCompletionDate DateTime?
+  actualCompletionDate DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  deletedAt            DateTime?
+  property             Property                 @relation(fields: [propertyId], references: [id])
+  unit                 Unit?                    @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  vendor               Vendor?                  @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  comments             WorkOrderComment[]
+  workOrderDocuments   WorkOrderDocument[]
+  statusHistory        WorkOrderStatusHistory[]
+  companyMaintenanceDeductions CompanyMaintenanceDeduction[]
+
+  @@index([propertyId])
+  @@index([unitId])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model Document {
+  id                 String              @id @default(uuid())
+  fileName           String
+  fileSize           Int
+  fileType           String
+  storageUrl         String
+  hash               String              @unique
+  category           DocumentCategory
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  deletedAt          DateTime?
+  previousDocumentId String?             @unique
+  previousDocument   Document?           @relation("DocumentVersionChain", fields: [previousDocumentId], references: [id])
+  nextDocument       Document?           @relation("DocumentVersionChain")
+  leaseDocuments     LeaseDocument[]
+  userDocuments      UserDocument[]
+  workOrderDocuments WorkOrderDocument[]
+}
+
+/// A lease can have multiple LeaseDocument rows of different purposes at once
+/// (e.g. a DRAFT_PREVIEW while under landlord review, later a
+/// TENANT_SIGNATURE_COPY, later an EXECUTED copy). If a document of a given
+/// purpose is regenerated (e.g. after an edit), create a new Document linked
+/// via Document.previousDocumentId to the one it replaces, rather than
+/// mutating the old row.
+model LeaseDocument {
+  id         String               @id @default(uuid())
+  leaseId    String
+  documentId String
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  purpose    LeaseDocumentPurpose
+  document   Document             @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  lease      Lease                @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@unique([leaseId, documentId])
+  @@index([leaseId])
+  @@index([documentId])
+  @@index([leaseId, purpose])
+}
+
+model UserDocument {
+  id         String   @id @default(uuid())
+  userId     String
+  documentId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, documentId])
+  @@index([userId])
+  @@index([documentId])
+}
+
+model WorkOrderDocument {
+  id          String    @id @default(uuid())
+  workOrderId String
+  documentId  String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@unique([workOrderId, documentId])
+  @@index([workOrderId])
+  @@index([documentId])
+}
+
+
+/// oldStatus is nullable so the very first row for a lease (creation itself)
+/// can be logged as null -> DRAFT, changedByUserId = the creator. Every
+/// subsequent transition (approve, reject, sign, decline, terminate, expire,
+/// etc.) gets its own row with a real oldStatus.
+model LeaseStatusHistory {
+  id                String       @id @default(uuid())
+  leaseId           String
+  oldStatus         LeaseStatus?
+  newStatus         LeaseStatus
+  changedByUserId   String
+  reasonDescription String?
+  changedAt         DateTime     @default(now())
+  changedByUser     User         @relation("UserLeaseStatusHistory", fields: [changedByUserId], references: [id])
+  lease             Lease        @relation("LeaseStatusHistoryTrack", fields: [leaseId], references: [id])
+
+  @@index([leaseId])
+  @@index([changedByUserId])
+}
+
+
+model WorkOrderComment {
+  id          String    @id @default(uuid())
+  workOrderId String
+  authorId    String
+  body        String
+  createdAt   DateTime  @default(now())
+  author      User      @relation(fields: [authorId], references: [id])
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@index([authorId])
+}
+
+model WorkOrderStatusHistory {
+  id                String           @id @default(uuid())
+  workOrderId       String
+  oldStatus         WorkOrderStatus?
+  newStatus         WorkOrderStatus
+  changedByUserId   String
+  assignedVendorId  String?
+  previousVendorId  String?
+  reasonDescription String?
+  changedAt         DateTime         @default(now())
+  assignedVendor    Vendor?          @relation("AssignedVendorHistory", fields: [assignedVendorId], references: [id])
+  changedByUser     User             @relation("UserStatusHistory", fields: [changedByUserId], references: [id])
+  previousVendor    Vendor?          @relation("PreviousVendorHistory", fields: [previousVendorId], references: [id])
+  workOrder         WorkOrder        @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@index([changedByUserId])
+  @@index([assignedVendorId])
+  @@index([previousVendorId])
+}
+
+model NotificationHistory {
+  id             String             @id @default(uuid())
+  userId         String?
+  recipient      String
+  subject        String
+  template       String
+  status         NotificationStatus
+  provider       String
+  retryCount     Int                @default(0)
+  deliveryResult String?
+  createdAt      DateTime           @default(now())
+  user           User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+model UserPreference {
+  id                     String   @id @default(uuid())
+  userId                 String   @unique
+  emailEnabled           Boolean  @default(true)
+  smsEnabled             Boolean  @default(false)
+  pushEnabled            Boolean  @default(false)
+  marketingEmailsEnabled Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum UserRole {
+  ADMIN
+  LANDLORD
+  TENANT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum PropertyType {
+  RESIDENTIAL
+  COMMERCIAL
+}
+
+enum PropertyLayout {
+  STANDALONE
+  MULTI_UNIT
+}
+
+/// RESERVED = a lease exists for this unit in any non-terminal, pre-active
+/// status (DRAFT / PENDING_LANDLORD_APPROVAL / PENDING_TENANT_SIGNATURE).
+/// Draft creation is only ever allowed when status == VACANT — that single
+/// check should be the only gate used anywhere in the app for "can a new
+/// lease be started here."
+/// NOTICE_GIVEN = the unit's current lease is in PENDING_TERMINATION_APPROVAL.
+enum UnitOccupancyStatus {
+  VACANT
+  OCCUPIED
+  NOTICE_GIVEN
+  MAINTENANCE
+  RESERVED
+}
+
+enum LeaseStatus {
+  DRAFT
+  PENDING_LANDLORD_APPROVAL
+  PENDING_TENANT_SIGNATURE
+  ACTIVE
+  PENDING_TERMINATION_APPROVAL
+  EXPIRED
+  TERMINATED
+  REJECTED
+  CANCELLED
+  DECLINED
+}
+
+enum LeaseRenewalType {
+  AUTO_MONTH_TO_MONTH
+  FIXED_END
+}
+
+/// PENDING = attached to the lease, hasn't signed yet.
+/// ACTIVE = has signed.
+/// DECLINED = refused to sign — this cascades the parent Lease to DECLINED,
+/// since a lease can only reach ACTIVE once every non-removed LeaseTenant is
+/// individually ACTIVE (see Lease business constraint comment).
+enum LeaseTenantStatus {
+  ACTIVE
+  REMOVED
+  PENDING
+  DECLINED
+}
+
+/// Distinguishes which stage of the workflow a generated document belongs to.
+/// Multiple LeaseDocument rows of different purposes can exist for one lease;
+/// use Document's built-in version chain (previousDocumentId) within a given
+/// purpose if a document is regenerated (e.g. re-rendered after an edit).
+enum LeaseDocumentPurpose {
+  DRAFT_PREVIEW
+  TENANT_SIGNATURE_COPY
+  EXECUTED
+}
+
+enum LedgerType {
+  OPERATING
+  TRUST
+}
+
+enum ChargeType {
+  RENT
+  SECURITY_DEPOSIT
+  LATE_FEE
+  UTILITY
+  MAINTENANCE
+  MISC
+}
+
+enum ChargeStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  VOIDED
+}
+
+enum PaymentMethod {
+  ACH
+  CREDIT_CARD
+  CASH
+  CHECK
+}
+
+enum PaymentStatus {
+  PENDING
+  CLEARED
+  FAILED
+  REFUNDED
+}
+
+enum DisbursementMethod {
+  MANUAL
+  STRIPE
+  RAZORPAY
+}
+
+enum DisbursementStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum WorkOrderPriority {
+  LOW
+  MEDIUM
+  HIGH
+  EMERGENCY
+}
+
+enum WorkOrderStatus {
+  SUBMITTED
+  ASSIGNED
+  IN_PROGRESS
+  ON_HOLD
+  RESOLVED
+  CANCELLED
+}
+
+enum DocumentCategory {
+  LEASE_AGREEMENT
+  GOVERNMENT_ID
+  INVOICE
+  RECEIPT
+  DAMAGE_PHOTO
+  OTHER
+}
+
+enum OtpStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+}
+
+enum LedgerTriggerEvent {
+  CHARGE
+  PAYMENT
+  VOID
+  REFUND
+}
+
+enum DeletionStatus {
+  PENDING_ADMIN_APPROVAL
+  PENDING_LANDLORD_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum NotificationStatus {
+  SENT
+  FAILED
+}
+
+

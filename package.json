@@ -1,0 +1,18 @@
+{
+  "name": "pms-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Property Management System Monorepo",
+  "scripts": {
+    "dev": "pnpm --recursive dev",
+    "build": "pnpm --recursive build"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@prisma/config": "^6.19.3",
+    "prisma": "^6.19.3"
+  }
+}

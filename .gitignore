@@ -1,0 +1,68 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+jspm_packages/
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Build output
+dist/
+build/
+coverage/
+.nyc_output/
+.turbo/
+out/
+.next/
+.nuxt/
+.vuepress/dist/
+
+# Typescript & Caches
+*.tsbuildinfo
+.npm/
+.eslintcache
+.stylelintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+.cache/
+.parcel-cache/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Prisma specific
+/apps/api/prisma/data.db
+/apps/api/prisma/data.db-journal
+
+# NestJS specific
+.nest/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+Thumbs.db

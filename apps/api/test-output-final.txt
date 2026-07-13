@@ -1,0 +1,600 @@
+FAIL src/modules/maintenance/test/maintenance.service.spec.ts
+  ● MaintenanceService › create › should successfully create a work order and write initial history
+
+    TypeError: this.prisma.unit.findUnique is not a function
+
+      73 |     if (user.role === UserRole.LANDLORD) {
+      74 |       if (targetUnitId) {
+    > 75 |         const unit = await this.prisma.unit.findUnique({ where: { id: targetUnitId } });
+         |                                             ^
+      76 |         if (unit?.landlordId !== user.id) {
+      77 |           throw new ForbiddenException('You do not have permission to submit work orders for this unit.');
+      78 |         }
+
+      at MaintenanceService.create (modules/maintenance/maintenance.service.ts:75:45)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:100:28)
+
+  ● MaintenanceService › transition › should transition status and record history log
+
+    TypeError: this.prisma.unit.findUnique is not a function
+
+      488 |     if (user.role === UserRole.LANDLORD) {
+      489 |       if (workOrder.unitId) {
+    > 490 |         const unit = await this.prisma.unit.findUnique({ where: { id: workOrder.unitId } });
+          |                                             ^
+      491 |         if (unit?.landlordId !== user.id) {
+      492 |           throw new ForbiddenException('You do not have permission to manage resources under this unit.');
+      493 |         }
+
+      at MaintenanceService.validateWorkOrderAccess (modules/maintenance/maintenance.service.ts:490:45)
+      at MaintenanceService.transition (modules/maintenance/maintenance.service.ts:274:16)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:125:28)
+
+  ● MaintenanceService › transition › should throw BadRequestException for invalid status transition
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: BadRequestException
+    Received constructor: TypeError
+
+    Received message: "this.prisma.unit.findUnique is not a function"
+
+          488 |     if (user.role === UserRole.LANDLORD) {
+          489 |       if (workOrder.unitId) {
+        > 490 |         const unit = await this.prisma.unit.findUnique({ where: { id: workOrder.unitId } });
+              |                                             ^
+          491 |         if (unit?.landlordId !== user.id) {
+          492 |           throw new ForbiddenException('You do not have permission to manage resources under this unit.');
+          493 |         }
+
+      at MaintenanceService.validateWorkOrderAccess (modules/maintenance/maintenance.service.ts:490:45)
+      at MaintenanceService.transition (modules/maintenance/maintenance.service.ts:274:16)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:131:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:131:123)
+
+  ● MaintenanceService › update › should reject negative estimated or actual costs
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: BadRequestException
+    Received constructor: TypeError
+
+    Received message: "this.prisma.unit.findUnique is not a function"
+
+          488 |     if (user.role === UserRole.LANDLORD) {
+          489 |       if (workOrder.unitId) {
+        > 490 |         const unit = await this.prisma.unit.findUnique({ where: { id: workOrder.unitId } });
+              |                                             ^
+          491 |         if (unit?.landlordId !== user.id) {
+          492 |           throw new ForbiddenException('You do not have permission to manage resources under this unit.');
+          493 |         }
+
+      at MaintenanceService.validateWorkOrderAccess (modules/maintenance/maintenance.service.ts:490:45)
+      at MaintenanceService.update (modules/maintenance/maintenance.service.ts:218:16)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:136:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:136:96)
+
+  ● MaintenanceService › update › should reject actual cost update if work order has not transitioned past ASSIGNED
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: BadRequestException
+    Received constructor: TypeError
+
+    Received message: "this.prisma.unit.findUnique is not a function"
+
+          488 |     if (user.role === UserRole.LANDLORD) {
+          489 |       if (workOrder.unitId) {
+        > 490 |         const unit = await this.prisma.unit.findUnique({ where: { id: workOrder.unitId } });
+              |                                             ^
+          491 |         if (unit?.landlordId !== user.id) {
+          492 |           throw new ForbiddenException('You do not have permission to manage resources under this unit.');
+          493 |         }
+
+      at MaintenanceService.validateWorkOrderAccess (modules/maintenance/maintenance.service.ts:490:45)
+      at MaintenanceService.update (modules/maintenance/maintenance.service.ts:218:16)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:139:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:139:96)
+
+FAIL src/modules/unit/test/unit.service.spec.ts
+  ● UnitService › create › should successfully create unit when landlord owns property
+
+    TypeError: Cannot read properties of undefined (reading 'count')
+
+      39 |
+      40 |     if (normalizedRole === 'LANDLORD') {
+    > 41 |       const landlordUnitsInProperty = await this.prisma.unit.count({
+         |                                                              ^
+      42 |         where: { propertyId, landlordId: user.id, deletedAt: null }
+      43 |       });
+      44 |       const totalUnitsInProperty = await this.prisma.unit.count({
+
+      at UnitService.validatePropertyAccess (modules/unit/unit.service.ts:41:62)
+      at UnitService.create (modules/unit/unit.service.ts:77:5)
+      at Object.<anonymous> (modules/unit/test/unit.service.spec.ts:86:28)
+
+  ● UnitService › create › should throw ForbiddenException if landlord does not own the property
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: ForbiddenException
+    Received constructor: TypeError
+
+    Received message: "Cannot read properties of undefined (reading 'count')"
+
+          39 |
+          40 |     if (normalizedRole === 'LANDLORD') {
+        > 41 |       const landlordUnitsInProperty = await this.prisma.unit.count({
+             |                                                              ^
+          42 |         where: { propertyId, landlordId: user.id, deletedAt: null }
+          43 |       });
+          44 |       const totalUnitsInProperty = await this.prisma.unit.count({
+
+      at UnitService.validatePropertyAccess (modules/unit/unit.service.ts:41:62)
+      at UnitService.create (modules/unit/unit.service.ts:77:5)
+      at Object.<anonymous> (modules/unit/test/unit.service.spec.ts:106:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/unit/test/unit.service.spec.ts:106:83)
+
+  ● UnitService › findOne › should return unit details when landlord owns the property associated with it
+
+    ForbiddenException: You do not have permission to manage this unit.
+
+      65 |
+      66 |     if (normalizedRole === 'LANDLORD' && unit.landlordId !== user.id) {
+    > 67 |       throw new ForbiddenException('You do not have permission to manage this unit.');
+         |             ^
+      68 |     }
+      69 |
+      70 |     return unit;
+
+      at UnitService.validateUnitAccess (modules/unit/unit.service.ts:67:13)
+
+FAIL src/modules/property/test/property.service.spec.ts
+  ● PropertyService › create › should associate property with calling landlord
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    - Expected
+    + Received
+
+    @@ -1,8 +1,8 @@
+      Object {
+        "city": "Austin",
+    -   "landlordId": "landlord-1",
+    +   "layout": undefined,
+        "name": "Heights Apartments",
+        "state": "TX",
+        "streetAddress": "123 Pine St",
+        "type": "RESIDENTIAL",
+        "zipCode": "78701",,
+
+    Number of calls: 1
+
+      85 |       const result = await service.create(dto, landlordUser);
+      86 |
+    > 87 |       expect(repository.create).toHaveBeenCalledWith({
+         |                                 ^
+      88 |         ...dto,
+      89 |         landlordId: landlordUser.id,
+      90 |       });
+
+      at Object.<anonymous> (modules/property/test/property.service.spec.ts:87:33)
+
+  ● PropertyService › create › should allow admin to specify landlordId
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    - Expected
+    + Received
+
+    @@ -1,8 +1,8 @@
+      Object {
+        "city": "Austin",
+    -   "landlordId": "landlord-custom",
+    +   "layout": undefined,
+        "name": "Heights Apartments",
+        "state": "TX",
+        "streetAddress": "123 Pine St",
+        "type": "RESIDENTIAL",
+        "zipCode": "78701",,
+
+    Number of calls: 1
+
+      107 |       await service.create(dto, adminUser);
+      108 |
+    > 109 |       expect(repository.create).toHaveBeenCalledWith({
+          |                                 ^
+      110 |         name: dto.name,
+      111 |         type: dto.type,
+      112 |         streetAddress: dto.streetAddress,
+
+      at Object.<anonymous> (modules/property/test/property.service.spec.ts:109:33)
+
+  ● PropertyService › findOne › should successfully return owned property to landlord
+
+    ForbiddenException: You do not have permission to access this property. You must own at least one unit in this property.
+
+      25 |
+      26 |     if (user.role === UserRole.LANDLORD && !(property as any).units?.some((u: any) => u.landlordId === user.id)) {
+    > 27 |       throw new ForbiddenException('You do not have permission to access this property. You must own at least one unit in this property.');
+         |             ^
+      28 |     }
+      29 |
+      30 |     return property;
+
+      at PropertyService.validateOwnership (modules/property/property.service.ts:27:13)
+
+  ● PropertyService › remove › should perform soft delete
+
+    ForbiddenException: You do not have permission to access this property. You must own at least one unit in this property.
+
+      25 |
+      26 |     if (user.role === UserRole.LANDLORD && !(property as any).units?.some((u: any) => u.landlordId === user.id)) {
+    > 27 |       throw new ForbiddenException('You do not have permission to access this property. You must own at least one unit in this property.');
+         |             ^
+      28 |     }
+      29 |
+      30 |     return property;
+
+      at PropertyService.validateOwnership (modules/property/property.service.ts:27:13)
+      at PropertyService.remove (modules/property/property.service.ts:245:5)
+      at Object.<anonymous> (modules/property/test/property.service.spec.ts:147:22)
+
+FAIL src/modules/document/test/document.service.spec.ts
+  ● DocumentService › download › should generate pre-signed URL for authorized user
+
+    ForbiddenException: You do not have access permissions for this document resource.
+
+      390 |
+      391 |     if (!isAuthorized) {
+    > 392 |       throw new ForbiddenException('You do not have access permissions for this document resource.');
+          |             ^
+      393 |     }
+      394 |   }
+      395 | }
+
+      at DocumentService.validateDocumentPermissions (modules/document/document.service.ts:392:13)
+      at DocumentService.download (modules/document/document.service.ts:187:16)
+      at Object.<anonymous> (modules/document/test/document.service.spec.ts:127:28)
+
+  ● DocumentService › remove › should prevent deletion of legal documents like Lease Agreements
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: MethodNotAllowedException
+    Received constructor: ForbiddenException
+
+    Received message: "You do not have access permissions for this document resource."
+
+          390 |
+          391 |     if (!isAuthorized) {
+        > 392 |       throw new ForbiddenException('You do not have access permissions for this document resource.');
+              |             ^
+          393 |     }
+          394 |   }
+          395 | }
+
+      at DocumentService.validateDocumentPermissions (modules/document/document.service.ts:392:13)
+      at DocumentService.remove (modules/document/document.service.ts:333:16)
+      at Object.<anonymous> (modules/document/test/document.service.spec.ts:142:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/document/test/document.service.spec.ts:142:73)
+
+PASS src/modules/lease/test/lease.service.spec.ts
+PASS src/modules/lease/test/lease-status.service.spec.ts
+PASS src/modules/auth/test/auth.controller.spec.ts
+PASS src/modules/lease/test/lease-status-workflow.spec.ts
+PASS src/modules/document/test/document.controller.spec.ts
+PASS src/modules/lease/test/lease-expiry-scheduler.service.spec.ts
+PASS src/modules/lease/test/lease.controller.spec.ts
+PASS src/modules/maintenance/test/maintenance.controller.spec.ts
+PASS src/modules/accounting/test/accounting.controller.spec.ts
+PASS src/modules/notification/test/notification.controller.spec.ts
+PASS src/modules/unit/test/unit.controller.spec.ts
+PASS src/modules/payment/test/payment.controller.spec.ts
+PASS src/modules/reporting/test/reporting.controller.spec.ts
+PASS src/modules/property/test/property.controller.spec.ts
+PASS src/modules/reporting/test/reporting.service.spec.ts
+PASS src/modules/auth/test/auth.service.spec.ts
+PASS src/modules/payment/test/payment.service.spec.ts
+PASS src/app.controller.spec.ts
+PASS src/modules/accounting/test/accounting.service.spec.ts
+PASS src/modules/notification/test/notification.service.spec.ts
+
+Summary of all failing tests
+FAIL modules/maintenance/test/maintenance.service.spec.ts
+  ● MaintenanceService › create › should successfully create a work order and write initial history
+
+    TypeError: this.prisma.unit.findUnique is not a function
+
+      73 |     if (user.role === UserRole.LANDLORD) {
+      74 |       if (targetUnitId) {
+    > 75 |         const unit = await this.prisma.unit.findUnique({ where: { id: targetUnitId } });
+         |                                             ^
+      76 |         if (unit?.landlordId !== user.id) {
+      77 |           throw new ForbiddenException('You do not have permission to submit work orders for this unit.');
+      78 |         }
+
+      at MaintenanceService.create (modules/maintenance/maintenance.service.ts:75:45)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:100:28)
+
+  ● MaintenanceService › transition › should transition status and record history log
+
+    TypeError: this.prisma.unit.findUnique is not a function
+
+      488 |     if (user.role === UserRole.LANDLORD) {
+      489 |       if (workOrder.unitId) {
+    > 490 |         const unit = await this.prisma.unit.findUnique({ where: { id: workOrder.unitId } });
+          |                                             ^
+      491 |         if (unit?.landlordId !== user.id) {
+      492 |           throw new ForbiddenException('You do not have permission to manage resources under this unit.');
+      493 |         }
+
+      at MaintenanceService.validateWorkOrderAccess (modules/maintenance/maintenance.service.ts:490:45)
+      at MaintenanceService.transition (modules/maintenance/maintenance.service.ts:274:16)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:125:28)
+
+  ● MaintenanceService › transition › should throw BadRequestException for invalid status transition
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: BadRequestException
+    Received constructor: TypeError
+
+    Received message: "this.prisma.unit.findUnique is not a function"
+
+          488 |     if (user.role === UserRole.LANDLORD) {
+          489 |       if (workOrder.unitId) {
+        > 490 |         const unit = await this.prisma.unit.findUnique({ where: { id: workOrder.unitId } });
+              |                                             ^
+          491 |         if (unit?.landlordId !== user.id) {
+          492 |           throw new ForbiddenException('You do not have permission to manage resources under this unit.');
+          493 |         }
+
+      at MaintenanceService.validateWorkOrderAccess (modules/maintenance/maintenance.service.ts:490:45)
+      at MaintenanceService.transition (modules/maintenance/maintenance.service.ts:274:16)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:131:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:131:123)
+
+  ● MaintenanceService › update › should reject negative estimated or actual costs
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: BadRequestException
+    Received constructor: TypeError
+
+    Received message: "this.prisma.unit.findUnique is not a function"
+
+          488 |     if (user.role === UserRole.LANDLORD) {
+          489 |       if (workOrder.unitId) {
+        > 490 |         const unit = await this.prisma.unit.findUnique({ where: { id: workOrder.unitId } });
+              |                                             ^
+          491 |         if (unit?.landlordId !== user.id) {
+          492 |           throw new ForbiddenException('You do not have permission to manage resources under this unit.');
+          493 |         }
+
+      at MaintenanceService.validateWorkOrderAccess (modules/maintenance/maintenance.service.ts:490:45)
+      at MaintenanceService.update (modules/maintenance/maintenance.service.ts:218:16)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:136:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:136:96)
+
+  ● MaintenanceService › update › should reject actual cost update if work order has not transitioned past ASSIGNED
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: BadRequestException
+    Received constructor: TypeError
+
+    Received message: "this.prisma.unit.findUnique is not a function"
+
+          488 |     if (user.role === UserRole.LANDLORD) {
+          489 |       if (workOrder.unitId) {
+        > 490 |         const unit = await this.prisma.unit.findUnique({ where: { id: workOrder.unitId } });
+              |                                             ^
+          491 |         if (unit?.landlordId !== user.id) {
+          492 |           throw new ForbiddenException('You do not have permission to manage resources under this unit.');
+          493 |         }
+
+      at MaintenanceService.validateWorkOrderAccess (modules/maintenance/maintenance.service.ts:490:45)
+      at MaintenanceService.update (modules/maintenance/maintenance.service.ts:218:16)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:139:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/maintenance/test/maintenance.service.spec.ts:139:96)
+
+FAIL modules/unit/test/unit.service.spec.ts
+  ● UnitService › create › should successfully create unit when landlord owns property
+
+    TypeError: Cannot read properties of undefined (reading 'count')
+
+      39 |
+      40 |     if (normalizedRole === 'LANDLORD') {
+    > 41 |       const landlordUnitsInProperty = await this.prisma.unit.count({
+         |                                                              ^
+      42 |         where: { propertyId, landlordId: user.id, deletedAt: null }
+      43 |       });
+      44 |       const totalUnitsInProperty = await this.prisma.unit.count({
+
+      at UnitService.validatePropertyAccess (modules/unit/unit.service.ts:41:62)
+      at UnitService.create (modules/unit/unit.service.ts:77:5)
+      at Object.<anonymous> (modules/unit/test/unit.service.spec.ts:86:28)
+
+  ● UnitService › create › should throw ForbiddenException if landlord does not own the property
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: ForbiddenException
+    Received constructor: TypeError
+
+    Received message: "Cannot read properties of undefined (reading 'count')"
+
+          39 |
+          40 |     if (normalizedRole === 'LANDLORD') {
+        > 41 |       const landlordUnitsInProperty = await this.prisma.unit.count({
+             |                                                              ^
+          42 |         where: { propertyId, landlordId: user.id, deletedAt: null }
+          43 |       });
+          44 |       const totalUnitsInProperty = await this.prisma.unit.count({
+
+      at UnitService.validatePropertyAccess (modules/unit/unit.service.ts:41:62)
+      at UnitService.create (modules/unit/unit.service.ts:77:5)
+      at Object.<anonymous> (modules/unit/test/unit.service.spec.ts:106:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/unit/test/unit.service.spec.ts:106:83)
+
+  ● UnitService › findOne › should return unit details when landlord owns the property associated with it
+
+    ForbiddenException: You do not have permission to manage this unit.
+
+      65 |
+      66 |     if (normalizedRole === 'LANDLORD' && unit.landlordId !== user.id) {
+    > 67 |       throw new ForbiddenException('You do not have permission to manage this unit.');
+         |             ^
+      68 |     }
+      69 |
+      70 |     return unit;
+
+      at UnitService.validateUnitAccess (modules/unit/unit.service.ts:67:13)
+
+FAIL modules/property/test/property.service.spec.ts
+  ● PropertyService › create › should associate property with calling landlord
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    - Expected
+    + Received
+
+    @@ -1,8 +1,8 @@
+      Object {
+        "city": "Austin",
+    -   "landlordId": "landlord-1",
+    +   "layout": undefined,
+        "name": "Heights Apartments",
+        "state": "TX",
+        "streetAddress": "123 Pine St",
+        "type": "RESIDENTIAL",
+        "zipCode": "78701",,
+
+    Number of calls: 1
+
+      85 |       const result = await service.create(dto, landlordUser);
+      86 |
+    > 87 |       expect(repository.create).toHaveBeenCalledWith({
+         |                                 ^
+      88 |         ...dto,
+      89 |         landlordId: landlordUser.id,
+      90 |       });
+
+      at Object.<anonymous> (modules/property/test/property.service.spec.ts:87:33)
+
+  ● PropertyService › create › should allow admin to specify landlordId
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    - Expected
+    + Received
+
+    @@ -1,8 +1,8 @@
+      Object {
+        "city": "Austin",
+    -   "landlordId": "landlord-custom",
+    +   "layout": undefined,
+        "name": "Heights Apartments",
+        "state": "TX",
+        "streetAddress": "123 Pine St",
+        "type": "RESIDENTIAL",
+        "zipCode": "78701",,
+
+    Number of calls: 1
+
+      107 |       await service.create(dto, adminUser);
+      108 |
+    > 109 |       expect(repository.create).toHaveBeenCalledWith({
+          |                                 ^
+      110 |         name: dto.name,
+      111 |         type: dto.type,
+      112 |         streetAddress: dto.streetAddress,
+
+      at Object.<anonymous> (modules/property/test/property.service.spec.ts:109:33)
+
+  ● PropertyService › findOne › should successfully return owned property to landlord
+
+    ForbiddenException: You do not have permission to access this property. You must own at least one unit in this property.
+
+      25 |
+      26 |     if (user.role === UserRole.LANDLORD && !(property as any).units?.some((u: any) => u.landlordId === user.id)) {
+    > 27 |       throw new ForbiddenException('You do not have permission to access this property. You must own at least one unit in this property.');
+         |             ^
+      28 |     }
+      29 |
+      30 |     return property;
+
+      at PropertyService.validateOwnership (modules/property/property.service.ts:27:13)
+
+  ● PropertyService › remove › should perform soft delete
+
+    ForbiddenException: You do not have permission to access this property. You must own at least one unit in this property.
+
+      25 |
+      26 |     if (user.role === UserRole.LANDLORD && !(property as any).units?.some((u: any) => u.landlordId === user.id)) {
+    > 27 |       throw new ForbiddenException('You do not have permission to access this property. You must own at least one unit in this property.');
+         |             ^
+      28 |     }
+      29 |
+      30 |     return property;
+
+      at PropertyService.validateOwnership (modules/property/property.service.ts:27:13)
+      at PropertyService.remove (modules/property/property.service.ts:245:5)
+      at Object.<anonymous> (modules/property/test/property.service.spec.ts:147:22)
+
+FAIL modules/document/test/document.service.spec.ts
+  ● DocumentService › download › should generate pre-signed URL for authorized user
+
+    ForbiddenException: You do not have access permissions for this document resource.
+
+      390 |
+      391 |     if (!isAuthorized) {
+    > 392 |       throw new ForbiddenException('You do not have access permissions for this document resource.');
+          |             ^
+      393 |     }
+      394 |   }
+      395 | }
+
+      at DocumentService.validateDocumentPermissions (modules/document/document.service.ts:392:13)
+      at DocumentService.download (modules/document/document.service.ts:187:16)
+      at Object.<anonymous> (modules/document/test/document.service.spec.ts:127:28)
+
+  ● DocumentService › remove › should prevent deletion of legal documents like Lease Agreements
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected constructor: MethodNotAllowedException
+    Received constructor: ForbiddenException
+
+    Received message: "You do not have access permissions for this document resource."
+
+          390 |
+          391 |     if (!isAuthorized) {
+        > 392 |       throw new ForbiddenException('You do not have access permissions for this document resource.');
+              |             ^
+          393 |     }
+          394 |   }
+          395 | }
+
+      at DocumentService.validateDocumentPermissions (modules/document/document.service.ts:392:13)
+      at DocumentService.remove (modules/document/document.service.ts:333:16)
+      at Object.<anonymous> (modules/document/test/document.service.spec.ts:142:13)
+      at Object.toThrow (../../../node_modules/.pnpm/expect@30.4.1/node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (modules/document/test/document.service.spec.ts:142:73)
+
+
+Test Suites: 4 failed, 20 passed, 24 total
+Tests:       14 failed, 136 passed, 150 total
+Snapshots:   0 total
+Time:        4.306 s
+Ran all test suites.
