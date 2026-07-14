@@ -324,7 +324,7 @@ model Disbursement {
 model CompanyMaintenanceDeduction {
   id               String   @id @default(uuid())
   leaseId          String
-  workOrderId      String
+  workOrderId      String   @unique
   amount           Decimal  @db.Decimal(18, 2)
   deductionMonth   DateTime
   recordedByUserId String
