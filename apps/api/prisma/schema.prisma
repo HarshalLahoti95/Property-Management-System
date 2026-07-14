@@ -710,6 +710,7 @@ enum LedgerTriggerEvent {
   PAYMENT
   VOID
   REFUND
+  DISBURSEMENT
 }
 
 enum DeletionStatus {
