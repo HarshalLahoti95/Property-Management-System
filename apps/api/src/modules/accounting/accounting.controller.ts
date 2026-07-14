@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { AccountingService } from './accounting.service';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { AdjustChargeDto } from './dto/adjust-charge.dto';
 import { ChargeQueryDto } from './dto/charge-query.dto';
+import { UpdateLeaseAccountingConfigDto } from './dto/update-lease-accounting-config.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -23,6 +24,18 @@ export class AccountingController {
   @Get('ledgers/lease/:leaseId')
   async findLedgersByLeaseId(@Param('leaseId') leaseId: string, @CurrentUser() user: any) {
     return this.accountingService.findLedgersByLeaseId(leaseId, user);
+  }
+
+  @ApiOperation({ summary: 'Update accounting configuration (e.g. grace periods) for a lease' })
+  @ApiParam({ name: 'leaseId', description: 'Lease UUID' })
+  @Roles(UserRole.ADMIN, UserRole.LANDLORD)
+  @Patch('lease-configs/:leaseId')
+  async updateLeaseConfig(
+    @Param('leaseId') leaseId: string,
+    @Body() dto: UpdateLeaseAccountingConfigDto,
+    @CurrentUser() user: any
+  ) {
+    return this.accountingService.updateLeaseConfig(leaseId, dto, user);
   }
 
   @ApiOperation({ summary: 'Retrieve dashboard summary (balances, next due charge, etc.) for a lease' })

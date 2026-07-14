@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { AccountingRepository } from './accounting.repository';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { AdjustChargeDto } from './dto/adjust-charge.dto';
 import { ChargeQueryDto } from './dto/charge-query.dto';
+import { UpdateLeaseAccountingConfigDto } from './dto/update-lease-accounting-config.dto';
 import { PrismaService } from '../../database/prisma.service';
 import { ChargeService } from './charge.service';
 import { LedgerService } from './ledger.service';
@@ -63,6 +64,34 @@ export class AccountingService {
     }
 
     return ledgers;
+  }
+
+  /**
+   * Upserts the LeaseAccountingConfig for a lease.
+   */
+  async updateLeaseConfig(
+    leaseId: string,
+    dto: UpdateLeaseAccountingConfigDto,
+    user: { id: string; role: string },
+  ) {
+    if (user.role === 'TENANT') {
+      throw new ForbiddenException('Tenants cannot modify lease accounting configurations.');
+    }
+    // Rely on existing scope-locked repository check to validate existence & access
+    await this.accountingRepository.validateLeaseAccess(leaseId, user);
+
+    return this.prisma.leaseAccountingConfig.upsert({
+      where: { leaseId },
+      create: {
+        leaseId,
+        tenantGracePeriodDays: dto.tenantGracePeriodDays ?? 0,
+        companyGracePeriodDays: dto.companyGracePeriodDays ?? 0,
+      },
+      update: {
+        ...(dto.tenantGracePeriodDays !== undefined && { tenantGracePeriodDays: dto.tenantGracePeriodDays }),
+        ...(dto.companyGracePeriodDays !== undefined && { companyGracePeriodDays: dto.companyGracePeriodDays }),
+      },
+    });
   }
 
   /**
