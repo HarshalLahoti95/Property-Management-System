@@ -6,9 +6,11 @@ import { BillingSchedulerService } from './billing-scheduler.service';
 import { LedgerReconciliationJob } from './jobs/ledger-reconciliation.job';
 import { ChargeService } from './charge.service';
 import { LedgerService } from './ledger.service';
+import { MaintenanceDeductionService } from './maintenance-deduction.service';
+import { MaintenanceDeductionController } from './maintenance-deduction.controller';
 
 @Module({
-  controllers: [AccountingController],
+  controllers: [AccountingController, MaintenanceDeductionController],
   providers: [
     AccountingService,
     AccountingRepository,
@@ -16,6 +18,7 @@ import { LedgerService } from './ledger.service';
     LedgerReconciliationJob,
     ChargeService,
     LedgerService,
+    MaintenanceDeductionService,
   ],
   exports: [
     AccountingService,
@@ -24,6 +27,7 @@ import { LedgerService } from './ledger.service';
     LedgerReconciliationJob,
     ChargeService,
     LedgerService,
+    MaintenanceDeductionService,
   ],
 })
 export class AccountingModule {}
