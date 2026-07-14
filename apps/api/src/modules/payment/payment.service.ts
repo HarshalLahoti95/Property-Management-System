@@ -99,6 +99,14 @@ export class PaymentService {
         });
       } catch (error: any) {
         if (error.code === 'P2002') {
+          const target = error.meta?.target;
+          const isLeaseBillingMonth = Array.isArray(target)
+            ? target.includes('leaseId') && target.includes('billingMonth')
+            : typeof target === 'string' && target.includes('leaseId') && target.includes('billingMonth');
+            
+          if (isLeaseBillingMonth) {
+            throw new ConflictException('A payment has already been recorded for this billing month.');
+          }
           throw new ConflictException(`Payment with transaction reference ${txRef} already exists.`);
         }
         throw error;
@@ -129,6 +137,33 @@ export class PaymentService {
 
       return payment;
     });
+  }
+
+  /**
+   * Retrieves the stripped-down due balance for a tenant.
+   * Fetches the oldest unsettled month and its actual charge rows.
+   */
+  async getDueBalance(leaseId: string) {
+    const oldestMonthData = await this.chargeService.getOldestUnsettledBillingMonth(leaseId, this.prisma);
+
+    if (!oldestMonthData) {
+      return { billingMonth: null, totalRemainingBalance: '0.00', charges: [] };
+    }
+
+    const charges = await this.prisma.rentCharge.findMany({
+      where: {
+        leaseId,
+        billingMonth: oldestMonthData.billingMonth,
+        status: { in: [ChargeStatus.UNPAID, ChargeStatus.PARTIALLY_PAID] },
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    return {
+      billingMonth: oldestMonthData.billingMonth,
+      totalRemainingBalance: oldestMonthData.totalRemainingBalance.toString(),
+      charges,
+    };
   }
 
   /**

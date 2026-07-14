@@ -108,6 +108,53 @@ export class PaymentRepository extends BaseRepository<Payment> {
   }
 
   /**
+   * Retrieves a ledger by its UUID.
+   */
+  async findLedgerById(id: string) {
+    const ledger = await this.prisma.financialLedger.findUnique({
+      where: { id },
+    });
+    if (!ledger) {
+      throw new NotFoundException(`Ledger with ID ${id} not found.`);
+    }
+    return ledger;
+  }
+
+  /**
+   * Enforces role-based permissions on a target Lease.
+   * NOTE: This intentionally mirrors AccountingRepository.validateLeaseAccess 
+   * to maintain the repository-scoped RBAC pattern. If RBAC logic changes, 
+   * update both places.
+   */
+  async validateLeaseAccess(
+    leaseId: string,
+    user: { id: string; role: string },
+  ): Promise<void> {
+    const lease = await this.prisma.lease.findFirst({
+      where: { id: leaseId, deletedAt: null },
+      include: {
+        unit: { include: { property: true } },
+        leaseTenants: true,
+      },
+    });
+
+    if (!lease) {
+      throw new NotFoundException(`Lease with ID ${leaseId} not found.`);
+    }
+
+    if (user.role === UserRole.LANDLORD && lease.unit.landlordId !== user.id) {
+      throw new ForbiddenException('You do not have permission to access records for this lease.');
+    }
+
+    if (user.role === UserRole.TENANT) {
+      const isTenantOnLease = lease.leaseTenants.some((lt) => lt.tenantId === user.id);
+      if (!isTenantOnLease) {
+        throw new ForbiddenException('You do not have permission to access this lease.');
+      }
+    }
+  }
+
+  /**
    * Enforces role-based permissions on a target FinancialLedger.
    */
   async validateLedgerAccess(
