@@ -11,6 +11,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserRole, Prisma } from '@prisma/client';
+import { DepositReturnService } from './deposit-return.service';
+import { RecordDepositReturnDto } from './dto/record-deposit-return.dto';
 
 @ApiTags('Payments')
 @ApiBearerAuth()
@@ -19,7 +21,8 @@ import { UserRole, Prisma } from '@prisma/client';
 export class PaymentController {
   constructor(
     private readonly paymentService: PaymentService,
-    private readonly paymentRepository: PaymentRepository
+    private readonly paymentRepository: PaymentRepository,
+    private readonly depositReturnService: DepositReturnService
   ) {}
 
   @ApiOperation({ summary: 'PMC Manual Payment Record' })
