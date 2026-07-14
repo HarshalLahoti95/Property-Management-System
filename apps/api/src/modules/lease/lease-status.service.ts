@@ -117,9 +117,14 @@ export class LeaseStatusService {
         });
       }
 
+      let leaseUpdateData: any = { status: newStatus };
+      if (newStatus === LeaseStatus.TERMINATED || newStatus === LeaseStatus.EXPIRED) {
+        leaseUpdateData.actualEndDate = new Date();
+      }
+
       const updated = await tx.lease.update({
         where: { id: leaseId },
-        data: { status: newStatus },
+        data: leaseUpdateData,
       });
 
       await tx.leaseStatusHistory.create({

@@ -8,31 +8,32 @@ datasource db {
 }
 
 model User {
-  id                    String                   @id @default(uuid())
-  email                 String                   @unique
-  fullName              String
-  phone                 String
-  role                  UserRole
-  status                UserStatus
-  createdAt             DateTime                 @default(now())
-  updatedAt             DateTime                 @updatedAt
-  deletedAt             DateTime?
-  mailingAddress        String?
-  leasesCreated         Lease[]                  @relation("LeaseCreatedBy")
-  leaseStatusHistories  LeaseStatusHistory[]     @relation("UserLeaseStatusHistory")
-  disbursementsRecorded Disbursement[]           @relation("DisbursementRecordedBy")
+  id                         String                        @id @default(uuid())
+  email                      String                        @unique
+  fullName                   String
+  phone                      String
+  role                       UserRole
+  status                     UserStatus
+  createdAt                  DateTime                      @default(now())
+  updatedAt                  DateTime                      @updatedAt
+  deletedAt                  DateTime?
+  mailingAddress             String?
+  leasesCreated              Lease[]                       @relation("LeaseCreatedBy")
+  leaseStatusHistories       LeaseStatusHistory[]          @relation("UserLeaseStatusHistory")
+  disbursementsRecorded      Disbursement[]                @relation("DisbursementRecordedBy")
   percentageHistoriesChanged LeaseSharePercentageHistory[] @relation("PercentageHistoryChangedBy")
-  companyDeductionsRecorded CompanyMaintenanceDeduction[] @relation("DeductionRecordedBy")
-  leaseTenants          LeaseTenant[]            @relation("TenantLeases")
-  notifications         NotificationHistory[]
-  otpRequests           OtpRequest[]
-  passwordCredential    PasswordCredential?
-  payments              Payment[]                @relation("TenantPayments")
-  units                 Unit[]                   @relation("LandlordUnits")
-  userDocuments         UserDocument[]
-  userPreference        UserPreference?
-  workOrderComments     WorkOrderComment[]
-  statusChangeHistories WorkOrderStatusHistory[] @relation("UserStatusHistory")
+  companyDeductionsRecorded  CompanyMaintenanceDeduction[] @relation("DeductionRecordedBy")
+  leaseTenants               LeaseTenant[]                 @relation("TenantLeases")
+  notifications              NotificationHistory[]
+  otpRequests                OtpRequest[]
+  passwordCredential         PasswordCredential?
+  payments                   Payment[]                     @relation("TenantPayments")
+  units                      Unit[]                        @relation("LandlordUnits")
+  userDocuments              UserDocument[]
+  userPreference             UserPreference?
+  workOrderComments          WorkOrderComment[]
+  statusChangeHistories      WorkOrderStatusHistory[]      @relation("UserStatusHistory")
+  depositReturnsRecorded     SecurityDepositReturn[]       @relation("DepositReturnRecordedBy")
 
   @@index([role, status])
 }
@@ -117,35 +118,37 @@ model Unit {
 /// - EXPIRATION: driven by a scheduled job comparing endDate against now for all ACTIVE leases — not a passive check-on-read. If a lease is PENDING_TERMINATION_APPROVAL when its endDate arrives, expiration takes precedence and the pending termination request is closed out as moot.
 /// - RENEWAL: renewalType == AUTO_MONTH_TO_MONTH changes what should happen at endDate — this business logic is not yet implemented and needs an explicit decision before the expiration job is built.
 model Lease {
-  id                   String               @id @default(uuid())
-  unitId               String
-  startDate            DateTime
-  endDate              DateTime
-  monthlyRent          Decimal              @db.Decimal(18, 2)
-  securityDeposit      Decimal              @db.Decimal(18, 2)
-  rentDueDay           Int
-  gracePeriodDays      Int
-  status               LeaseStatus
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
-  deletedAt            DateTime?
-  createdByRole        UserRole             @default(LANDLORD)
-  createdByUserId      String?
-  leaseTermsJson       Json?
-  renewalType          LeaseRenewalType     @default(FIXED_END)
-  financialLedgers     FinancialLedger[]
-  createdByUser        User?                @relation("LeaseCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  unit                 Unit                 @relation(fields: [unitId], references: [id])
-  leaseDocuments       LeaseDocument[]
-  leaseStatusHistories LeaseStatusHistory[] @relation("LeaseStatusHistoryTrack")
-  rentCharges          RentCharge[]
-  payments             Payment[]
-  sharePercentageHistories LeaseSharePercentageHistory[]
-  chargeSplitRules     ChargeSplitRule[]
-  disbursements        Disbursement[]
+  id                           String                        @id @default(uuid())
+  unitId                       String
+  startDate                    DateTime
+  endDate                      DateTime
+  monthlyRent                  Decimal                       @db.Decimal(18, 2)
+  securityDeposit              Decimal                       @db.Decimal(18, 2)
+  rentDueDay                   Int
+  gracePeriodDays              Int
+  status                       LeaseStatus
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  deletedAt                    DateTime?
+  createdByRole                UserRole                      @default(LANDLORD)
+  createdByUserId              String?
+  leaseTermsJson               Json?
+  renewalType                  LeaseRenewalType              @default(FIXED_END)
+  actualEndDate                DateTime?
+  financialLedgers             FinancialLedger[]
+  createdByUser                User?                         @relation("LeaseCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  unit                         Unit                          @relation(fields: [unitId], references: [id])
+  leaseDocuments               LeaseDocument[]
+  leaseStatusHistories         LeaseStatusHistory[]          @relation("LeaseStatusHistoryTrack")
+  rentCharges                  RentCharge[]
+  payments                     Payment[]
+  sharePercentageHistories     LeaseSharePercentageHistory[]
+  chargeSplitRules             ChargeSplitRule[]
+  disbursements                Disbursement[]
   companyMaintenanceDeductions CompanyMaintenanceDeduction[]
-  accountingConfig     LeaseAccountingConfig?
-  leaseTenants         LeaseTenant[]
+  accountingConfig             LeaseAccountingConfig?
+  leaseTenants                 LeaseTenant[]
+  securityDepositReturns       SecurityDepositReturn[]
 
   @@index([unitId])
   @@index([status])
@@ -202,9 +205,9 @@ model RentCharge {
   landlordSharePercentageSnapshot Decimal      @db.Decimal(5, 2)
   status                          ChargeStatus
   dueDate                         DateTime
-  description  String
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  description                     String
+  createdAt                       DateTime     @default(now())
+  updatedAt                       DateTime     @updatedAt
 
   ledger             FinancialLedger     @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
   lease              Lease               @relation(fields: [leaseId], references: [id], onDelete: Restrict)
@@ -339,6 +342,22 @@ model CompanyMaintenanceDeduction {
   @@index([recordedByUserId])
 }
 
+model SecurityDepositReturn {
+  id               String   @id @default(uuid())
+  leaseId          String
+  amount           Decimal  @db.Decimal(18, 2)
+  recordedByUserId String
+  reference        String?
+  reason           String?
+  createdAt        DateTime @default(now())
+
+  lease          Lease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  recordedByUser User  @relation("DepositReturnRecordedBy", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId])
+  @@index([recordedByUserId])
+}
+
 model LeaseAccountingConfig {
   id                     String   @id @default(uuid())
   leaseId                String   @unique
@@ -368,28 +387,28 @@ model Vendor {
 }
 
 model WorkOrder {
-  id                   String                   @id @default(uuid())
-  propertyId           String
-  unitId               String?
-  vendorId             String?
-  workOrderNumber      String                   @unique
-  title                String
-  description          String
-  priority             WorkOrderPriority
-  status               WorkOrderStatus
-  estimatedCost        Decimal?                 @db.Decimal(18, 2)
-  actualCost           Decimal?                 @db.Decimal(18, 2)
-  targetCompletionDate DateTime?
-  actualCompletionDate DateTime?
-  createdAt            DateTime                 @default(now())
-  updatedAt            DateTime                 @updatedAt
-  deletedAt            DateTime?
-  property             Property                 @relation(fields: [propertyId], references: [id])
-  unit                 Unit?                    @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  vendor               Vendor?                  @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  comments             WorkOrderComment[]
-  workOrderDocuments   WorkOrderDocument[]
-  statusHistory        WorkOrderStatusHistory[]
+  id                           String                        @id @default(uuid())
+  propertyId                   String
+  unitId                       String?
+  vendorId                     String?
+  workOrderNumber              String                        @unique
+  title                        String
+  description                  String
+  priority                     WorkOrderPriority
+  status                       WorkOrderStatus
+  estimatedCost                Decimal?                      @db.Decimal(18, 2)
+  actualCost                   Decimal?                      @db.Decimal(18, 2)
+  targetCompletionDate         DateTime?
+  actualCompletionDate         DateTime?
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  deletedAt                    DateTime?
+  property                     Property                      @relation(fields: [propertyId], references: [id])
+  unit                         Unit?                         @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  vendor                       Vendor?                       @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  comments                     WorkOrderComment[]
+  workOrderDocuments           WorkOrderDocument[]
+  statusHistory                WorkOrderStatusHistory[]
   companyMaintenanceDeductions CompanyMaintenanceDeduction[]
 
   @@index([propertyId])
@@ -467,7 +486,6 @@ model WorkOrderDocument {
   @@index([documentId])
 }
 
-
 /// oldStatus is nullable so the very first row for a lease (creation itself)
 /// can be logged as null -> DRAFT, changedByUserId = the creator. Every
 /// subsequent transition (approve, reject, sign, decline, terminate, expire,
@@ -486,7 +504,6 @@ model LeaseStatusHistory {
   @@index([leaseId])
   @@index([changedByUserId])
 }
-
 
 model WorkOrderComment {
   id          String    @id @default(uuid())
@@ -711,6 +728,7 @@ enum LedgerTriggerEvent {
   VOID
   REFUND
   DISBURSEMENT
+  DEPOSIT_RETURN
 }
 
 enum DeletionStatus {
@@ -724,5 +742,3 @@ enum NotificationStatus {
   SENT
   FAILED
 }
-
-
