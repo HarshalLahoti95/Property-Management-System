@@ -7,7 +7,6 @@ import {
   LeaseDocument,
   UserDocument,
   WorkOrderDocument,
-  PaymentDocument,
   UserRole,
   Prisma,
 } from '@prisma/client';
@@ -28,7 +27,6 @@ export class DocumentRepository extends BaseRepository<Document> {
         leaseDocuments: { include: { lease: { include: { unit: true, leaseTenants: true } } } },
         userDocuments: { include: { user: true } },
         workOrderDocuments: { include: { workOrder: { include: { unit: true, property: { include: { units: true } } } } } },
-        paymentDocuments: { include: { payment: { include: { ledger: { include: { lease: { include: { unit: true } } } } } } } },
       },
     });
   }
@@ -116,14 +114,12 @@ export class DocumentRepository extends BaseRepository<Document> {
       where.OR = [
         { leaseDocuments: { some: { lease: { unit: { landlordId: params.landlordId } } } } },
         { workOrderDocuments: { some: { workOrder: { OR: [ { unit: { landlordId: params.landlordId } }, { unitId: null, property: { units: { some: { landlordId: params.landlordId } } } } ] } } } },
-        { paymentDocuments: { some: { payment: { ledger: { lease: { unit: { landlordId: params.landlordId } } } } } } },
       ];
     } else if (params.tenantId) {
       where.OR = [
         { leaseDocuments: { some: { lease: { leaseTenants: { some: { tenantId: params.tenantId, status: 'ACTIVE' } } } } } },
         { userDocuments: { some: { userId: params.tenantId } } },
         { workOrderDocuments: { some: { workOrder: { unit: { leases: { some: { leaseTenants: { some: { tenantId: params.tenantId, status: 'ACTIVE' } } } } } } } } },
-        { paymentDocuments: { some: { payment: { tenantId: params.tenantId } } } },
       ];
     }
 

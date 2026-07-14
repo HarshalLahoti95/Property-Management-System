@@ -4,7 +4,7 @@ import { CreateDocumentAttachmentDto, AttachmentEntityType } from './dto/create-
 import { DocumentQueryDto } from './dto/document-query.dto';
 import { StorageProvider } from './interfaces/storage-provider.interface';
 import { PrismaService } from '../../database/prisma.service';
-import { Document, DocumentCategory, UserRole, LeaseDocument, UserDocument, WorkOrderDocument, PaymentDocument } from '@prisma/client';
+import { Document, DocumentCategory, UserRole, LeaseDocument, UserDocument, WorkOrderDocument } from '@prisma/client';
 import { createHash } from 'crypto';
 import { randomUUID } from 'crypto';
 
@@ -149,11 +149,6 @@ export class DocumentService {
           await tx.workOrderDocument.create({ data: { workOrderId: wd.workOrderId, documentId: newVersion.id } });
         }
 
-        const payDocs = await tx.paymentDocument.findMany({ where: { documentId: parentDocumentId } });
-        for (const pd of payDocs) {
-          await tx.paymentDocument.create({ data: { paymentId: pd.paymentId, documentId: newVersion.id } });
-        }
-
         return newVersion;
       });
     } catch (dbErr) {
@@ -247,11 +242,6 @@ export class DocumentService {
           const workOrder = await tx.workOrder.findFirst({ where: { id: dto.entityId, deletedAt: null } });
           if (!workOrder) throw new NotFoundException(`Work order with ID ${dto.entityId} not found.`);
           return tx.workOrderDocument.create({ data: { workOrderId: dto.entityId, documentId } });
-
-        case AttachmentEntityType.PAYMENT:
-          const payment = await tx.payment.findFirst({ where: { id: dto.entityId } });
-          if (!payment) throw new NotFoundException(`Payment with ID ${dto.entityId} not found.`);
-          return tx.paymentDocument.create({ data: { paymentId: dto.entityId, documentId } });
       }
     });
   }
@@ -281,9 +271,6 @@ export class DocumentService {
 
         case AttachmentEntityType.WORK_ORDER:
           return tx.workOrderDocument.delete({ where: { workOrderId_documentId: { workOrderId: dto.entityId, documentId } } });
-
-        case AttachmentEntityType.PAYMENT:
-          return tx.paymentDocument.delete({ where: { paymentId_documentId: { paymentId: dto.entityId, documentId } } });
       }
     });
   }
@@ -383,11 +370,8 @@ export class DocumentService {
       const linkedToLandlordWorkOrder = document.workOrderDocuments?.some(
         (wd: any) => wd.workOrder.unit?.landlordId === user.id || (!wd.workOrder.unitId && wd.workOrder.property.units.some((u: any) => u.landlordId === user.id)),
       );
-      const linkedToLandlordPayment = document.paymentDocuments?.some(
-        (pd: any) => pd.payment.ledger.lease.unit.landlordId === user.id,
-      );
 
-      if (linkedToLandlordLease || linkedToLandlordWorkOrder || linkedToLandlordPayment) {
+      if (linkedToLandlordLease || linkedToLandlordWorkOrder) {
         isAuthorized = true;
       }
     } else if (user.role === UserRole.TENANT) {
@@ -401,9 +385,8 @@ export class DocumentService {
           l.leaseTenants.some((lt: any) => lt.tenantId === user.id && lt.status === 'ACTIVE')
         ),
       );
-      const linkedToTenantPayment = document.paymentDocuments?.some((pd: any) => pd.payment.tenantId === user.id);
 
-      if (linkedToTenantLease || linkedToTenantUser || linkedToTenantWorkOrder || linkedToTenantPayment) {
+      if (linkedToTenantLease || linkedToTenantUser || linkedToTenantWorkOrder) {
         isAuthorized = true;
       }
     }

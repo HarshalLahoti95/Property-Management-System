@@ -30,6 +30,10 @@ export class AuthService {
       throw new UnauthorizedException('User account is not active');
     }
 
+    if (user.role !== 'ADMIN') {
+      throw new UnauthorizedException('User is not an administrator');
+    }
+
     if (!user.passwordCredential) {
       throw new UnauthorizedException('No password credential configured for this administrator');
     }
