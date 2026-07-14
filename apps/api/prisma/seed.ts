@@ -225,26 +225,24 @@ async function main() {
       },
     });
 
-    const operatingLedger = await prisma.financialLedger.findFirst({
-      where: { leaseId, ledgerType: LedgerType.OPERATING }
+    const trustLedger = await prisma.financialLedger.findFirst({
+      where: { leaseId, ledgerType: LedgerType.TRUST }
     });
 
-    if (operatingLedger) {
+    if (trustLedger) {
       await prisma.rentCharge.create({
         data: {
-          ledgerId: operatingLedger.id,
+          leaseId: leaseId,
+          ledgerId: trustLedger.id,
+          billingMonth: startDate,
           dueDate: new Date(),
           type: ChargeType.RENT,
           amount: unit.targetRent,
           paidAmount: 0,
           status: ChargeStatus.UNPAID,
           description: 'Monthly Rent',
+          landlordSharePercentageSnapshot: 100,
         },
-      });
-
-      await prisma.financialLedger.update({
-        where: { id: operatingLedger.id },
-        data: { runningBalance: Number(unit.targetRent) },
       });
     }
   };
