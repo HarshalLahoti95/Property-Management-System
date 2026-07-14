@@ -1,15 +1,17 @@
-import { Controller, Get, Post, Patch, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Put, Param, Query, Body, UseGuards, Req, ParseUUIDPipe, ParseEnumPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { AccountingService } from './accounting.service';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { AdjustChargeDto } from './dto/adjust-charge.dto';
 import { ChargeQueryDto } from './dto/charge-query.dto';
 import { UpdateLeaseAccountingConfigDto } from './dto/update-lease-accounting-config.dto';
+import { CreateSharePercentageDto } from './dto/create-share-percentage.dto';
+import { UpsertChargeSplitRuleDto } from './dto/upsert-charge-split-rule.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { UserRole } from '@prisma/client';
+import { UserRole, ChargeType } from '@prisma/client';
 
 @ApiTags('Accounting')
 @ApiBearerAuth()
@@ -36,6 +38,31 @@ export class AccountingController {
     @CurrentUser() user: any
   ) {
     return this.accountingService.updateLeaseConfig(leaseId, dto, user);
+  }
+
+  @ApiOperation({ summary: 'Record new base share percentage for a lease' })
+  @Roles(UserRole.ADMIN)
+  @Post('leases/:leaseId/share-percentages')
+  async createSharePercentage(
+    @Param('leaseId', ParseUUIDPipe) leaseId: string,
+    @Body() dto: CreateSharePercentageDto,
+    @Req() req: any,
+  ) {
+    const userObj = { id: req.user.id, role: req.user.role as UserRole };
+    return this.accountingService.createSharePercentage(leaseId, dto, userObj);
+  }
+
+  @ApiOperation({ summary: 'Upsert charge split rule for a specific charge type' })
+  @Roles(UserRole.ADMIN)
+  @Put('leases/:leaseId/charge-split-rules/:chargeType')
+  async upsertChargeSplitRule(
+    @Param('leaseId', ParseUUIDPipe) leaseId: string,
+    @Param('chargeType', new ParseEnumPipe(ChargeType)) chargeType: ChargeType,
+    @Body() dto: UpsertChargeSplitRuleDto,
+    @Req() req: any,
+  ) {
+    const userObj = { id: req.user.id, role: req.user.role as UserRole };
+    return this.accountingService.upsertChargeSplitRule(leaseId, chargeType, dto, userObj);
   }
 
   @ApiOperation({ summary: 'Retrieve dashboard summary (balances, next due charge, etc.) for a lease' })

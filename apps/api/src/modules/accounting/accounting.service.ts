@@ -4,9 +4,12 @@ import { CreateChargeDto } from './dto/create-charge.dto';
 import { AdjustChargeDto } from './dto/adjust-charge.dto';
 import { ChargeQueryDto } from './dto/charge-query.dto';
 import { UpdateLeaseAccountingConfigDto } from './dto/update-lease-accounting-config.dto';
+import { CreateSharePercentageDto } from './dto/create-share-percentage.dto';
+import { UpsertChargeSplitRuleDto } from './dto/upsert-charge-split-rule.dto';
 import { PrismaService } from '../../database/prisma.service';
 import { ChargeService } from './charge.service';
 import { LedgerService } from './ledger.service';
+import { Decimal } from '@prisma/client/runtime/library';
 import {
   FinancialLedger,
   RentCharge,
@@ -80,16 +83,52 @@ export class AccountingService {
     // Rely on existing scope-locked repository check to validate existence & access
     await this.accountingRepository.validateLeaseAccess(leaseId, user);
 
+    const updateData = {
+      ...(dto.tenantGracePeriodDays !== undefined && { tenantGracePeriodDays: dto.tenantGracePeriodDays }),
+      ...(dto.companyGracePeriodDays !== undefined && { companyGracePeriodDays: dto.companyGracePeriodDays }),
+    };
+
     return this.prisma.leaseAccountingConfig.upsert({
       where: { leaseId },
+      update: updateData,
       create: {
         leaseId,
         tenantGracePeriodDays: dto.tenantGracePeriodDays ?? 0,
         companyGracePeriodDays: dto.companyGracePeriodDays ?? 0,
       },
+    });
+  }
+
+  async createSharePercentage(leaseId: string, dto: CreateSharePercentageDto, user: { id: string; role: UserRole }) {
+    await this.accountingRepository.validateLeaseAccess(leaseId, user);
+
+    return this.prisma.leaseSharePercentageHistory.create({
+      data: {
+        leaseId,
+        landlordSharePercentage: new Decimal(dto.landlordSharePercentage),
+        effectiveFrom: new Date(),
+        changedByUserId: user.id,
+      },
+    });
+  }
+
+  async upsertChargeSplitRule(leaseId: string, chargeType: ChargeType, dto: UpsertChargeSplitRuleDto, user: { id: string; role: UserRole }) {
+    await this.accountingRepository.validateLeaseAccess(leaseId, user);
+
+    return this.prisma.chargeSplitRule.upsert({
+      where: {
+        leaseId_chargeType: {
+          leaseId,
+          chargeType,
+        },
+      },
       update: {
-        ...(dto.tenantGracePeriodDays !== undefined && { tenantGracePeriodDays: dto.tenantGracePeriodDays }),
-        ...(dto.companyGracePeriodDays !== undefined && { companyGracePeriodDays: dto.companyGracePeriodDays }),
+        landlordSharePercentage: new Decimal(dto.landlordSharePercentage),
+      },
+      create: {
+        leaseId,
+        chargeType,
+        landlordSharePercentage: new Decimal(dto.landlordSharePercentage),
       },
     });
   }
