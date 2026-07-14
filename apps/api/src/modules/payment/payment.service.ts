@@ -6,9 +6,11 @@ import { RefundPaymentDto } from './dto/refund-payment.dto';
 import { PrismaService } from '../../database/prisma.service';
 import { AccountingService } from '../accounting/accounting.service';
 import { ChargeService } from '../accounting/charge.service';
-import { Payment, PaymentAllocation, PaymentStatus, ChargeStatus, UserRole } from '@prisma/client';
+import { LedgerService } from '../accounting/ledger.service';
+import { AllocationService } from './allocation.service';
+import { Payment, PaymentAllocation, PaymentStatus, ChargeStatus, UserRole, PaymentMethod } from '@prisma/client';
 import { Prisma } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class PaymentService {
@@ -18,7 +20,116 @@ export class PaymentService {
     @Inject(forwardRef(() => AccountingService))
     private readonly accountingService: AccountingService,
     private readonly chargeService: ChargeService,
+    private readonly allocationService: AllocationService,
+    private readonly ledgerService: LedgerService,
   ) {}
+
+  /**
+   * The sole entry point for recording tenant payments.
+   * Enforces exact-amount monthly payments and strict serialization.
+   */
+  async recordPaymentReceived(
+    leaseId: string,
+    tenantId: string,
+    amount: Prisma.Decimal,
+    method: PaymentMethod,
+    reference: string | null,
+    recordedByUserId: string
+  ): Promise<Payment> {
+    if (amount.lte(0)) {
+      throw new BadRequestException('Payment amount must be strictly greater than zero.');
+    }
+
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Lock the Lease row to serialize concurrent payments for the same lease
+      const lockedLeases = await tx.$queryRaw<any[]>`
+        SELECT id FROM "Lease" 
+        WHERE id = ${leaseId} 
+        FOR UPDATE
+      `;
+
+      if (!lockedLeases || lockedLeases.length === 0) {
+        throw new NotFoundException('Lease not found');
+      }
+
+      // 2. Validate tenant explicitly belongs to this lease
+      const validTenant = await tx.leaseTenant.findFirst({
+        where: { leaseId, tenantId },
+      });
+
+      if (!validTenant) {
+        throw new ForbiddenException('The specified tenant does not belong to this lease.');
+      }
+
+      // 3. Determine oldest unsettled billing month
+      const oldestMonthData = await this.chargeService.getOldestUnsettledBillingMonth(leaseId, tx);
+
+      if (!oldestMonthData) {
+        throw new BadRequestException('There are no outstanding charges to pay.');
+      }
+
+      // 4. Exact amount validation
+      if (!amount.equals(oldestMonthData.totalRemainingBalance)) {
+        throw new BadRequestException(
+          `Must pay the exact monthly total. Expected: ${oldestMonthData.totalRemainingBalance.toString()}, Received: ${amount.toString()}`
+        );
+      }
+
+      // 5. Fetch TRUST ledger (Payment.ledgerId is required for creation)
+      const trustLedger = await this.ledgerService.getLedger(leaseId, 'TRUST', tx);
+
+      // 6. Handle unique transactionReference (Generate fallback if missing)
+      const txRef = reference || `${method}-${randomUUID().slice(0, 8).toUpperCase()}`;
+
+      // 7. Create Payment row (Catches P2002 for robust concurrency protection)
+      let payment: Payment;
+      try {
+        payment = await tx.payment.create({
+          data: {
+            leaseId,
+            ledgerId: trustLedger.id,
+            tenantId,
+            amount,
+            paymentMethod: method,
+            transactionReference: txRef,
+            status: PaymentStatus.CLEARED, // Manual exact payments settle immediately
+            paymentDate: new Date(), 
+            billingMonth: oldestMonthData.billingMonth,
+          }
+        });
+      } catch (error: any) {
+        if (error.code === 'P2002') {
+          throw new ConflictException(`Payment with transaction reference ${txRef} already exists.`);
+        }
+        throw error;
+      }
+
+      // 8. Allocate the payment across the month's charges
+      await this.allocationService.executeAllocation(
+        payment.id,
+        leaseId,
+        oldestMonthData.billingMonth,
+        amount,
+        tx
+      );
+
+      // 9. Update the TRUST ledger running balance and append history
+      await this.ledgerService.updateBalance(
+        {
+          ledgerId: trustLedger.id,
+          amountDelta: amount,
+          triggerEventType: 'PAYMENT',
+          triggerEventId: payment.id,
+        },
+        tx
+      );
+
+      // 10. TODO: trigger landlord notification
+      // (Using recordedByUserId context if needed for the notification payload)
+
+      return payment;
+    });
+  }
 
   /**
    * Registers a tenant payment, processes FIFO allocations, and synchronizes the ledger balance.
