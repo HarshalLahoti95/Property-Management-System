@@ -171,6 +171,13 @@ export class DisbursementService {
       if (newStatus === DisbursementStatus.PAID) {
         const trustLedger = await this.ledgerService.getLedger(updated.leaseId, LedgerType.TRUST, t);
 
+        // Defense-in-depth: Never disburse more cash than is actually sitting in the TRUST ledger
+        if (trustLedger.runningBalance.lessThan(updated.amount)) {
+          throw new BadRequestException(
+            `Insufficient funds in TRUST ledger. Attempted to disburse ${updated.amount.toString()}, but only ${trustLedger.runningBalance.toString()} is available.`
+          );
+        }
+
         // Negative delta because money is leaving the company's trust account
         const delta = updated.amount.negated();
 
