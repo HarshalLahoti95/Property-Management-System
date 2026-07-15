@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AccountingService } from '../accounting.service';
 import { AccountingRepository } from '../accounting.repository';
+import { ChargeService } from '../charge.service';
+import { LedgerService } from '../ledger.service';
 import { PrismaService } from '../../../database/prisma.service';
 import { ChargeStatus, ChargeType, LedgerType, UserRole } from '@prisma/client';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
@@ -10,6 +12,8 @@ describe('AccountingService', () => {
   let service: AccountingService;
   let repository: AccountingRepository;
   let prisma: PrismaService;
+  let chargeService: ChargeService;
+  let ledgerService: LedgerService;
 
   const landlordUser = { id: 'landlord-1', role: UserRole.LANDLORD };
   const tenantUser = { id: 'tenant-1', role: UserRole.TENANT };
@@ -85,12 +89,28 @@ describe('AccountingService', () => {
             },
           },
         },
+        {
+          provide: ChargeService,
+          useValue: {
+            createOneOffCharge: jest.fn().mockResolvedValue(mockCharge),
+            voidCharge: jest.fn().mockResolvedValue({ ...mockCharge, status: ChargeStatus.VOIDED }),
+            updateChargeAmount: jest.fn().mockResolvedValue(mockCharge),
+          },
+        },
+        {
+          provide: LedgerService,
+          useValue: {
+            createLedgersForLease: jest.fn().mockResolvedValue(null),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<AccountingService>(AccountingService);
     repository = module.get<AccountingRepository>(AccountingRepository);
     prisma = module.get<PrismaService>(PrismaService);
+    chargeService = module.get<ChargeService>(ChargeService);
+    ledgerService = module.get<LedgerService>(LedgerService);
   });
 
   it('should be defined', () => {
@@ -111,8 +131,8 @@ describe('AccountingService', () => {
 
       await service.initializeLedgers('lease-1');
       expect(prisma.lease.findUnique).toHaveBeenCalledWith({ where: { id: 'lease-1', deletedAt: null } });
-      expect(prisma.financialLedger.create).toHaveBeenCalledTimes(2);
-      expect(prisma.rentCharge.create).toHaveBeenCalled();
+      expect(ledgerService.createLedgersForLease).toHaveBeenCalled();
+      expect(chargeService.createOneOffCharge).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if lease does not exist', async () => {
@@ -125,8 +145,7 @@ describe('AccountingService', () => {
     it('should compute balances, counts, and outstanding charges', async () => {
       const summary = await service.getLeaseSummary('lease-1', landlordUser);
       expect(repository.validateLeaseAccess).toHaveBeenCalledWith('lease-1', landlordUser);
-      expect(summary.operatingBalance).toBe(100.00);
-      expect(summary.trustBalance).toBe(0.00);
+      expect(summary.trustBalance).toBe(0);
       expect(summary.outstandingCharges).toHaveLength(1);
       expect(summary.chargeCounts[ChargeStatus.UNPAID]).toBe(1);
     });
@@ -163,10 +182,13 @@ describe('AccountingService', () => {
         landlordUser,
       );
 
-      expect(prisma.financialLedger.update).toHaveBeenCalledWith({
-        where: { id: mockLedger.id },
-        data: { runningBalance: expect.any(Prisma.Decimal) },
-      });
+      expect(chargeService.createOneOffCharge).toHaveBeenCalledWith(
+        'lease-1',
+        ChargeType.UTILITY,
+        expect.any(Prisma.Decimal),
+        expect.any(Date),
+        'Water bill'
+      );
       expect(result).toBeDefined();
     });
   });
@@ -185,10 +207,7 @@ describe('AccountingService', () => {
       } as any);
 
       const result = await service.voidCharge('charge-1', landlordUser);
-      expect(prisma.rentCharge.update).toHaveBeenCalledWith({
-        where: { id: 'charge-1' },
-        data: { status: ChargeStatus.VOIDED },
-      });
+      expect(chargeService.voidCharge).toHaveBeenCalledWith('charge-1');
       expect(result.status).toBe(ChargeStatus.VOIDED);
     });
   });
@@ -203,11 +222,7 @@ describe('AccountingService', () => {
 
       const result = await service.adjustCharge('charge-1', { amount: 20.00, description: 'Credit Adjustment' }, landlordUser);
       
-      expect(prisma.financialLedger.update).toHaveBeenCalledWith({
-        where: { id: mockLedger.id },
-        data: { runningBalance: expect.any(Prisma.Decimal) },
-      });
-      expect(prisma.ledgerBalanceHistory.create).toHaveBeenCalled();
+      expect(chargeService.updateChargeAmount).toHaveBeenCalledWith('charge-1', expect.any(Prisma.Decimal));
       expect(result).toBeDefined();
     });
   });

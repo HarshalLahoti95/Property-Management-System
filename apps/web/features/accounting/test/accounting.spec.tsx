@@ -45,7 +45,6 @@ describe('Accounting Feature Components', () => {
 
   describe('LeaseFinancialSummary', () => {
     const mockSummary = {
-      operatingBalance: 1250.5,
       trustBalance: 1500,
       outstandingCharges: [],
       nextDueCharge: {

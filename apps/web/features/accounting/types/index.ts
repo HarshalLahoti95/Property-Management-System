@@ -38,7 +38,6 @@ export interface LedgerBalanceHistory {
 }
 
 export interface LeaseSummary {
-  operatingBalance: number;
   trustBalance: number;
   outstandingCharges: Array<{
     id: string;

@@ -122,7 +122,7 @@ export function useAdjustCharge() {
             if (oldSummary) {
               queryClient.setQueryData(entry.queryKey, {
                 ...oldSummary,
-                operatingBalance: Math.max(0, oldSummary.operatingBalance - values.amount),
+                trustBalance: oldSummary.trustBalance,
               });
             }
           }

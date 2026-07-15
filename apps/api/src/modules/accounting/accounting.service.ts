@@ -140,7 +140,6 @@ export class AccountingService {
     leaseId: string,
     user: { id: string; role: string },
   ): Promise<{
-    operatingBalance: number;
     trustBalance: number;
     outstandingCharges: Array<{
       id: string;
@@ -160,10 +159,8 @@ export class AccountingService {
     await this.accountingRepository.validateLeaseAccess(leaseId, user);
 
     const ledgers = await this.findLedgersByLeaseId(leaseId, user);
-    const opLedger = ledgers.find((l) => l.ledgerType === LedgerType.OPERATING);
     const trustLedger = ledgers.find((l) => l.ledgerType === LedgerType.TRUST);
 
-    const opBalance = opLedger ? opLedger.runningBalance.toNumber() : 0.00;
     const trBalance = trustLedger ? trustLedger.runningBalance.toNumber() : 0.00;
 
     // Fetch all charges for both ledgers
@@ -202,7 +199,6 @@ export class AccountingService {
     }
 
     return {
-      operatingBalance: opBalance,
       trustBalance: trBalance,
       outstandingCharges,
       nextDueCharge: nextDue
