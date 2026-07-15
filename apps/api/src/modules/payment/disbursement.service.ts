@@ -46,9 +46,36 @@ export class DisbursementService {
     });
 
     const totalAllocated = allocations._sum.landlordShareAmount || new Decimal(0);
-    const totalDisbursed = disbursements._sum.amount || new Decimal(0);
+    const totalPaid = disbursements._sum.amount || new Decimal(0);
 
-    return totalAllocated.minus(totalDisbursed);
+    return totalAllocated.minus(totalPaid);
+  }
+
+  /**
+   * Computes the current net retained balance for the company for a given lease.
+   * Computed as: sum(PaymentAllocation.companyShareAmount) 
+   *              - sum(CompanyMaintenanceDeduction.amount)
+   */
+  async computeCompanyRetainedBalance(
+    leaseId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<Decimal> {
+    const client = tx || this.prisma;
+
+    const allocations = await client.paymentAllocation.aggregate({
+      where: { rentCharge: { leaseId } },
+      _sum: { companyShareAmount: true },
+    });
+    
+    const deductions = await client.companyMaintenanceDeduction.aggregate({
+      where: { leaseId },
+      _sum: { amount: true },
+    });
+
+    const totalCompanyShare = allocations._sum.companyShareAmount || new Decimal(0);
+    const totalDeductions = deductions._sum.amount || new Decimal(0);
+
+    return totalCompanyShare.minus(totalDeductions);
   }
 
   /**

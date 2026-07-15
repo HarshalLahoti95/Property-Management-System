@@ -140,6 +140,27 @@ export class ReportingRepository {
   }
 
   /**
+   * Calculates total gross cash collected (cash-basis) filterable by date range and landlord.
+   */
+  async getTotalCollected(landlordId?: string, startDate?: string, endDate?: string): Promise<number> {
+    let start: Date | undefined;
+    let end: Date | undefined;
+    if (startDate) start = new Date(startDate);
+    if (endDate) end = new Date(endDate);
+
+    const result = await this.prisma.payment.aggregate({
+      _sum: { amount: true },
+      where: {
+        status: 'CLEARED',
+        ...(start || end ? { paymentDate: { gte: start, lte: end } } : {}),
+        lease: landlordId ? { unit: { landlordId } } : undefined,
+      },
+    });
+
+    return result._sum.amount?.toNumber() || 0;
+  }
+
+  /**
    * Compiles raw payment details for exports.
    */
   async getRawFinancialsForExport(landlordId?: string): Promise<any[]> {
