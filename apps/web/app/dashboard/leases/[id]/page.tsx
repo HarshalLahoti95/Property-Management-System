@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
-import { ToastProvider, useToast } from '@/components/ui/toast';
+import { useToast } from '@/components/ui/toast';
 
 // ─── Inner page (needs access to toast context) ───────────────────────────────
 
@@ -383,9 +383,5 @@ function LeaseDetailContent({ id }: { id: string }) {
 export default function LeaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const id = resolvedParams.id;
-  return (
-    <ToastProvider>
-      <LeaseDetailContent id={id} />
-    </ToastProvider>
-  );
+  return <LeaseDetailContent id={id} />;
 }

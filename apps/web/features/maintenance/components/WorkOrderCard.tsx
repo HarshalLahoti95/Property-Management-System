@@ -6,6 +6,10 @@ import { PriorityBadge } from './PriorityBadge';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Calendar, MapPin, User, DollarSign } from 'lucide-react';
+import { useState } from 'react';
+import { MaintenanceDeductionDialog } from './MaintenanceDeductionDialog';
+import { useCreateMaintenanceDeduction } from '../hooks/use-maintenance-deduction';
+import { useToast } from '@/components/ui/toast';
 
 interface WorkOrderCardProps {
   workOrder: WorkOrder;
@@ -21,7 +25,29 @@ export function WorkOrderCard({
   onEditClick,
 }: WorkOrderCardProps) {
   const { user } = useAuth();
+  const { addToast } = useToast();
   const isLandlordOrAdmin = user?.role === 'ADMIN' || user?.role === 'LANDLORD';
+  const isAdmin = user?.role === 'ADMIN';
+  
+  const [deductionDialogOpen, setDeductionDialogOpen] = useState(false);
+  const { mutateAsync: createDeduction, isPending: submittingDeduction } = useCreateMaintenanceDeduction();
+
+  const handleCreateDeduction = async () => {
+    try {
+      await createDeduction({ workOrderId: workOrder.id });
+      addToast({ title: 'Success', description: 'Maintenance deduction recorded successfully.', variant: 'success' });
+      setDeductionDialogOpen(false);
+    } catch (err: any) {
+      addToast({ 
+        title: 'Error', 
+        description: err?.response?.data?.message || err.message || 'Failed to record deduction.', 
+        variant: 'error' 
+      });
+      setDeductionDialogOpen(false);
+    }
+  };
+
+  const canDeduct = workOrder.actualCost !== null && workOrder.actualCost > 0 && workOrder.unitId !== null;
 
   const hasEstimatedCost = workOrder.estimatedCost !== null;
   const hasActualCost = workOrder.actualCost !== null;
@@ -126,8 +152,31 @@ export function WorkOrderCard({
               Update Status
             </Button>
           )}
+
+          {isAdmin && (
+            <span 
+              title={!canDeduct ? "Actual cost must be logged and assigned to a specific unit before a deduction can be recorded." : undefined}
+            >
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                disabled={!canDeduct}
+                onClick={() => setDeductionDialogOpen(true)}
+              >
+                Deduct from Company Share
+              </Button>
+            </span>
+          )}
         </div>
       )}
+
+      <MaintenanceDeductionDialog
+        open={deductionDialogOpen}
+        onOpenChange={setDeductionDialogOpen}
+        workOrder={workOrder}
+        onConfirm={handleCreateDeduction}
+        submitting={submittingDeduction}
+      />
     </div>
   );
 }

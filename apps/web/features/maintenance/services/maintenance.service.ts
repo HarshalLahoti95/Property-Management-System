@@ -7,6 +7,17 @@ import {
   CommentFormValues,
 } from '../schemas';
 
+export interface CreateMaintenanceDeductionDto {
+  workOrderId: string;
+}
+
+export interface MaintenanceDeductionResponse {
+  id: string;
+  leaseId: string;
+  amount: number;
+  deductionMonth: string;
+}
+
 export const maintenanceService = {
   async getWorkOrders(params?: Record<string, unknown>) {
     const { data } = await apiClient.get<{
@@ -74,5 +85,13 @@ export const maintenanceService = {
       `/maintenance/work-orders/${id}/history`
     );
     return data;
+  },
+
+  async createMaintenanceDeduction(data: CreateMaintenanceDeductionDto) {
+    const response = await apiClient.post<MaintenanceDeductionResponse>(
+      '/accounting/maintenance-deductions',
+      data
+    );
+    return response.data;
   },
 };
