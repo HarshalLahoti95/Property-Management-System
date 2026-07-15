@@ -134,6 +134,42 @@ export class AccountingService {
   }
 
   /**
+   * Retrieves the current effective base share percentage and all specific charge split rules.
+   */
+  async getLeaseRevenueSplits(leaseId: string, user: { id: string; role: string }) {
+    await this.accountingRepository.validateLeaseAccess(leaseId, user);
+
+    const now = new Date();
+    
+    // Get the currently active base percentage (most recent effective date in the past)
+    const activeBasePercentage = await this.prisma.leaseSharePercentageHistory.findFirst({
+      where: {
+        leaseId,
+        effectiveFrom: { lte: now }
+      },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+
+    // Get all specific charge split rules
+    const chargeSplitRules = await this.prisma.chargeSplitRule.findMany({
+      where: { leaseId },
+    });
+
+    return {
+      currentBasePercentage: activeBasePercentage ? {
+        id: activeBasePercentage.id,
+        landlordSharePercentage: activeBasePercentage.landlordSharePercentage.toNumber(),
+        effectiveFrom: activeBasePercentage.effectiveFrom,
+      } : null,
+      chargeSplitRules: chargeSplitRules.map(rule => ({
+        id: rule.id,
+        chargeType: rule.chargeType,
+        landlordSharePercentage: rule.landlordSharePercentage.toNumber(),
+      })),
+    };
+  }
+
+  /**
    * Retrieves dashboard summary data for a lease.
    */
   async getLeaseSummary(

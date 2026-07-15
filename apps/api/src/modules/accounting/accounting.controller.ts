@@ -65,6 +65,14 @@ export class AccountingController {
     return this.accountingService.upsertChargeSplitRule(leaseId, chargeType, dto, userObj);
   }
 
+  @ApiOperation({ summary: 'Retrieve current effective revenue splits and charge rules for a lease' })
+  @ApiParam({ name: 'leaseId', description: 'Lease UUID' })
+  @Roles(UserRole.ADMIN)
+  @Get('leases/:leaseId/revenue-splits')
+  async getLeaseRevenueSplits(@Param('leaseId', ParseUUIDPipe) leaseId: string, @CurrentUser() user: any) {
+    return this.accountingService.getLeaseRevenueSplits(leaseId, user);
+  }
+
   @ApiOperation({ summary: 'Retrieve dashboard summary (balances, next due charge, etc.) for a lease' })
   @ApiParam({ name: 'leaseId', description: 'Lease UUID' })
   @Roles(UserRole.ADMIN, UserRole.LANDLORD, UserRole.TENANT)
