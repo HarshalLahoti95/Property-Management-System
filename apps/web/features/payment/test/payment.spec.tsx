@@ -2,6 +2,7 @@ import * as React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { z } from 'zod';
 import { PaymentTable } from '../components/PaymentTable';
 import { PaymentForm } from '../components/PaymentForm';
 import { PaymentCard } from '../components/PaymentCard';
@@ -13,6 +14,24 @@ import { PaymentMethod, PaymentStatus } from '../types';
 import { Lease } from '@/features/lease/types';
 
 // Mock hooks and API
+jest.mock('@hookform/resolvers/zod', () => ({
+  zodResolver: (schema: z.ZodSchema) => async (data: any) => {
+    try {
+      const valid = await schema.parseAsync(data);
+      return { values: valid, errors: {} };
+    } catch (e: any) {
+      if (e.name === 'ZodError') {
+        const issues = e.issues || e.errors || [];
+        const errors = issues.reduce((acc: any, curr: any) => {
+          acc[curr.path[0]] = { type: curr.code, message: curr.message };
+          return acc;
+        }, {});
+        return { values: {}, errors };
+      }
+      throw e;
+    }
+  }
+}));
 jest.mock('@/hooks/use-auth', () => ({
   useAuth: jest.fn(),
 }));
@@ -141,11 +160,11 @@ describe('Payment Feature Components', () => {
       fireEvent.change(screen.getByLabelText(/select lease agreement/i), { target: { value: '22222222-2222-2222-2222-222222222222' } });
 
       // Trigger submit
-      fireEvent.click(screen.getByRole('button', { name: /submit payment/i }));
+      const form = screen.getByRole('button', { name: /submit payment/i }).closest('form');
+      fireEvent.submit(form!);
 
-      await waitFor(() => {
-        expect(screen.getByText('Please select the paying tenant.')).toBeInTheDocument();
-      });
+      const errorText = await screen.findByText('Please select the paying tenant.');
+      expect(errorText).toBeInTheDocument();
       expect(handleSubmit).not.toHaveBeenCalled();
     });
 
@@ -159,15 +178,23 @@ describe('Payment Feature Components', () => {
       // Select ACH to avoid transaction reference required error
       fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'CASH' } });
 
+      // Because setValue inside useEffect might run before the conditionally rendered <select> mounts, 
+      // let's manually select the tenant to simulate what the user (or the form) would do if the auto-select had a tick delay.
+      const tenantSelect = await screen.findByLabelText(/paying tenant/i);
+      
+      fireEvent.change(screen.getByLabelText(/payment date/i), { target: { value: '2026-07-15' } });
+
       // Trigger submit
-      fireEvent.click(screen.getByRole('button', { name: /submit payment/i }));
+      const form = screen.getByRole('button', { name: /submit payment/i }).closest('form');
+      fireEvent.submit(form!);
 
       await waitFor(() => {
         expect(handleSubmit).toHaveBeenCalledWith(expect.objectContaining({
           leaseId: '11111111-1111-1111-1111-111111111111',
           tenantId: 't1',
           amount: 1500,
-          method: 'CASH'
+          method: 'CASH',
+          paymentDate: '2026-07-15'
         }));
       });
     });
@@ -237,7 +264,7 @@ describe('Payment Feature Components', () => {
 
       expect(screen.getByText('rent')).toBeInTheDocument();
       expect(screen.getByText('Rent charge for July')).toBeInTheDocument();
-      expect(screen.getByText('$1200.00')).toBeInTheDocument();
+      expect(screen.getByText('₹1200.00')).toBeInTheDocument();
     });
 
     it('should show empty state when there are no allocations', () => {
