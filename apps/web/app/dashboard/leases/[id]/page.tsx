@@ -8,6 +8,7 @@ import {
   LeaseHistoryTable,
   LeaseStatusBadge,
   useLeaseDocuments,
+  LeaseRevenueSplitsCard,
 } from '@/features/lease';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -304,6 +305,8 @@ function LeaseDetailContent({ id }: { id: string }) {
         </div>
       </div>
 
+      <LeaseRevenueSplitsCard leaseId={lease.id} />
+
       {/* Documents Section */}
       <div className="bg-card border border-border p-6 rounded-lg space-y-4 text-foreground">
         <h3 className="text-lg font-bold">Lease Documents</h3>
@@ -320,10 +323,8 @@ function LeaseDetailContent({ id }: { id: string }) {
                     {new Date(doc.createdAt).toLocaleDateString()} • {doc.fileName}
                   </p>
                 </div>
-                <Button variant="secondary" size="sm" asChild>
-                  <a href={doc.downloadUrl} target="_blank" rel="noreferrer">
-                    Open PDF
-                  </a>
+                <Button variant="secondary" size="sm" onClick={() => window.open(doc.downloadUrl, '_blank')}>
+                  Open PDF
                 </Button>
               </div>
             ))}

@@ -7,3 +7,6 @@ export * from './components/LeaseHistoryTable';
 export * from './components/LeaseForm';
 export * from './components/LeaseStatusTimeline';
 export * from './components/LeaseStatusBadge';
+export * from './components/LeaseRevenueSplitsCard';
+export * from './hooks/use-revenue-splits';
+export * from './services/revenue-splits.service';

@@ -52,3 +52,5 @@ export interface LeaseStatusHistory {
   reasonDescription?: string;
   changedAt: string;
 }
+
+export * from './revenue-splits';
