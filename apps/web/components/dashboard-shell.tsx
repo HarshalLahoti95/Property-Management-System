@@ -21,6 +21,7 @@ import {
   ChevronRight,
   CreditCard,
   BarChart3,
+  Banknote,
 } from 'lucide-react';
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -34,6 +35,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     { name: 'Properties', href: '/dashboard/properties', icon: Building, roles: ['ADMIN', 'LANDLORD'] },
     { name: 'Leases', href: '/dashboard/leases', icon: FileText },
     { name: 'Accounting', href: '/dashboard/accounting', icon: DollarSign, roles: ['ADMIN', 'LANDLORD'] },
+    { name: 'Disbursements', href: '/dashboard/disbursements', icon: Banknote, roles: ['ADMIN'] },
     { name: 'Payments', href: '/dashboard/payments', icon: CreditCard },
     { name: 'Reports', href: '/dashboard/reports', icon: BarChart3, roles: ['ADMIN', 'LANDLORD'] },
     { name: 'Maintenance', href: '/dashboard/maintenance', icon: Wrench },
