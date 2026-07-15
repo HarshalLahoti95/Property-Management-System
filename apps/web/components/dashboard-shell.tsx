@@ -23,6 +23,7 @@ import {
   BarChart3,
   Banknote,
   AlertTriangle,
+  PieChart,
 } from 'lucide-react';
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     { name: 'Accounting', href: '/dashboard/accounting', icon: DollarSign, roles: ['ADMIN', 'LANDLORD'] },
     { name: 'Disbursements', href: '/dashboard/disbursements', icon: Banknote, roles: ['ADMIN'] },
     { name: 'Terminations', href: '/dashboard/terminations', icon: AlertTriangle, roles: ['ADMIN'] },
+    { name: 'Portfolio', href: '/dashboard/portfolio', icon: PieChart, roles: ['ADMIN', 'LANDLORD'] },
     { name: 'Payments', href: '/dashboard/payments', icon: CreditCard },
     { name: 'Reports', href: '/dashboard/reports', icon: BarChart3, roles: ['ADMIN', 'LANDLORD'] },
     { name: 'Maintenance', href: '/dashboard/maintenance', icon: Wrench },
