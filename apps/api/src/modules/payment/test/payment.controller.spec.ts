@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentController } from '../payment.controller';
 import { PaymentService } from '../payment.service';
+import { PaymentRepository } from '../payment.repository';
+import { DepositReturnService } from '../deposit-return.service';
 import { UserRole } from '@prisma/client';
 
 describe('PaymentController', () => {
@@ -17,12 +19,19 @@ describe('PaymentController', () => {
         {
           provide: PaymentService,
           useValue: {
-            create: jest.fn().mockResolvedValue(mockPayment),
             findOne: jest.fn().mockResolvedValue(mockPayment),
             findAll: jest.fn().mockResolvedValue({ data: [mockPayment], meta: {} }),
             findHistory: jest.fn().mockResolvedValue([]),
             refund: jest.fn().mockResolvedValue({ ...mockPayment, status: 'REFUNDED' }),
           },
+        },
+        {
+          provide: PaymentRepository,
+          useValue: {},
+        },
+        {
+          provide: DepositReturnService,
+          useValue: {},
         },
       ],
     }).compile();
@@ -35,21 +44,7 @@ describe('PaymentController', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('create', () => {
-    it('should invoke create service method', async () => {
-      const dto = {
-        ledgerId: 'ledger-1',
-        tenantId: 'tenant-1',
-        amount: 1200.00,
-        paymentMethod: 'ACH' as any,
-        transactionReference: 'TXN-123',
-        paymentDate: new Date().toISOString(),
-      };
-      const result = await controller.create(dto, mockUser);
-      expect(service.create).toHaveBeenCalledWith(dto, mockUser);
-      expect(result).toEqual(mockPayment);
-    });
-  });
+
 
   describe('findOne', () => {
     it('should invoke findOne service method', async () => {

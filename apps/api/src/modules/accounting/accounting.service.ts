@@ -380,39 +380,7 @@ export class AccountingService {
     return await this.chargeService.updateChargeAmount(chargeId, new Prisma.Decimal(dto.amount));
   }
 
-  /**
-   * Internal balance recalculation callback triggered by the Payment module when a Payment clears or is allocated.
-   */
-  async handlePaymentApplied(
-    ledgerId: string,
-    paymentId: string,
-    allocatedAmount: number,
-  ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      const ledger = await tx.financialLedger.findUniqueOrThrow({
-        where: { id: ledgerId },
-      });
 
-      const oldBalance = ledger.runningBalance;
-      const amountToDeduct = new Prisma.Decimal(allocatedAmount);
-      const newBalance = oldBalance.minus(amountToDeduct);
-
-      await tx.financialLedger.update({
-        where: { id: ledgerId },
-        data: { runningBalance: newBalance },
-      });
-
-      await tx.ledgerBalanceHistory.create({
-        data: {
-          ledgerId,
-          oldBalance,
-          newBalance,
-          triggerEventType: LedgerTriggerEvent.PAYMENT,
-          triggerEventId: paymentId,
-        },
-      });
-    });
-  }
 
   /**
    * Internal helper to initialize ledgers.

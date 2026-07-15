@@ -3,7 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger'
 import { PaymentService } from './payment.service';
 import { PaymentRepository } from './payment.repository';
 import { RecordPaymentDto } from './dto/record-payment.dto';
-import { CreatePaymentDto } from './dto/create-payment.dto';
+
 import { PaymentQueryDto } from './dto/payment-query.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -102,12 +102,7 @@ export class PaymentController {
     };
   }
 
-  @ApiOperation({ summary: 'Submit/register a tenant payment' })
-  @Roles(UserRole.ADMIN, UserRole.TENANT)
-  @Post()
-  async create(@Body() dto: CreatePaymentDto, @CurrentUser() user: any) {
-    return this.paymentService.create(dto, user);
-  }
+
 
   @ApiOperation({ summary: 'Retrieve details of a payment' })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
@@ -144,14 +139,5 @@ export class PaymentController {
     return this.paymentService.refund(id, dto, user);
   }
 
-  @ApiOperation({ summary: 'Approve a pending cash payment' })
-  @ApiParam({ name: 'id', description: 'Payment UUID' })
-  @Roles(UserRole.LANDLORD)
-  @Post(':id/approve')
-  async approve(
-    @Param('id') id: string,
-    @CurrentUser() user: any,
-  ) {
-    return this.paymentService.approve(id, user);
-  }
+
 }

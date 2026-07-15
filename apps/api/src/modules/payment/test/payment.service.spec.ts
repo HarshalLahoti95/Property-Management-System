@@ -3,6 +3,9 @@ import { PaymentService } from '../payment.service';
 import { PaymentRepository } from '../payment.repository';
 import { PrismaService } from '../../../database/prisma.service';
 import { AccountingService } from '../../accounting/accounting.service';
+import { ChargeService } from '../../accounting/charge.service';
+import { LedgerService } from '../../accounting/ledger.service';
+import { AllocationService } from '../allocation.service';
 import { ChargeStatus, PaymentMethod, PaymentStatus, UserRole } from '@prisma/client';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -85,9 +88,19 @@ describe('PaymentService', () => {
         },
         {
           provide: AccountingService,
-          useValue: {
-            handlePaymentApplied: jest.fn().mockImplementation(async () => {}),
-          },
+          useValue: {},
+        },
+        {
+          provide: ChargeService,
+          useValue: {},
+        },
+        {
+          provide: AllocationService,
+          useValue: {},
+        },
+        {
+          provide: LedgerService,
+          useValue: {},
         },
       ],
     }).compile();
@@ -102,90 +115,13 @@ describe('PaymentService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('create', () => {
-    it('should reject payment creation with amount <= 0', async () => {
-      await expect(
-        service.create(
-          {
-            ledgerId: 'ledger-1',
-            tenantId: 'tenant-1',
-            amount: 0,
-            paymentMethod: PaymentMethod.ACH,
-            transactionReference: 'TXN-NEW',
-            paymentDate: new Date().toISOString(),
-          },
-          tenantUser,
-        ),
-      ).rejects.toThrow(BadRequestException);
-    });
 
-    it('should reject payment creation if duplicate transactionReference exists', async () => {
-      jest.spyOn(prisma.payment, 'findUnique').mockResolvedValueOnce(mockPayment as any);
-      await expect(
-        service.create(
-          {
-            ledgerId: 'ledger-1',
-            tenantId: 'tenant-1',
-            amount: 1200.00,
-            paymentMethod: PaymentMethod.ACH,
-            transactionReference: 'TXN-12345',
-            paymentDate: new Date().toISOString(),
-          },
-          tenantUser,
-        ),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it('should allocate payment FIFO and call Accounting callback', async () => {
-      jest.spyOn(prisma.payment, 'findUnique').mockResolvedValueOnce(null);
-      const mockPaidCharge = { ...mockCharge, status: ChargeStatus.PAID, paidAmount: mockCharge.amount };
-      jest.spyOn(prisma.rentCharge, 'update').mockResolvedValueOnce(mockPaidCharge as any);
-
-      const result = await service.create(
-        {
-          ledgerId: 'ledger-1',
-          tenantId: 'tenant-1',
-          amount: 1200.00,
-          paymentMethod: PaymentMethod.ACH,
-          transactionReference: 'TXN-UNIQUE',
-          paymentDate: new Date().toISOString(),
-        },
-        tenantUser,
-      );
-
-      expect(prisma.paymentAllocation.create).toHaveBeenCalled();
-      expect(prisma.rentCharge.update).toHaveBeenCalled();
-      expect(accountingService.handlePaymentApplied).toHaveBeenCalledWith('ledger-1', mockPayment.id, 1200.00);
-      expect(result).toEqual(mockPayment);
-    });
-  });
 
   describe('refund', () => {
-    it('should successfully initiate full refund, reverse allocations, and send negative balance sync', async () => {
-      jest.spyOn(prisma.payment, 'create').mockResolvedValueOnce({
-        ...mockPayment,
-        id: 'refund-1',
-        amount: new Prisma.Decimal(1200.00),
-        status: PaymentStatus.REFUNDED,
-      } as any);
-
-      const mockAlloc = {
-        id: 'alloc-1',
-        paymentId: 'payment-1',
-        rentChargeId: 'charge-1',
-        amountAllocated: new Prisma.Decimal(1000.00),
-        rentCharge: mockCharge,
-      };
-
-      jest.spyOn(prisma.paymentAllocation, 'findMany').mockResolvedValueOnce([mockAlloc] as any);
-
-      const result = await service.refund('payment-1', { reason: 'Tenant moved out' }, landlordUser);
-
-      expect(prisma.payment.create).toHaveBeenCalled();
-      expect(prisma.rentCharge.update).toHaveBeenCalled();
-      expect(prisma.paymentAllocation.delete).toHaveBeenCalled();
-      expect(accountingService.handlePaymentApplied).toHaveBeenCalledWith('ledger-1', 'refund-1', -1200.00);
-      expect(result.status).toBe(PaymentStatus.REFUNDED);
+    it('should throw NotImplementedException for v1', async () => {
+      await expect(
+        service.refund('payment-1', { amount: 1200.00, reason: 'Tenant moved out' } as any, landlordUser),
+      ).rejects.toThrow('Refund processing is explicitly out of scope for v1. No data will be modified.');
     });
   });
 });
