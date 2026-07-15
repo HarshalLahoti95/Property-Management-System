@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import { useLeases } from '@/features/lease';
-import { useCreatePayment, PaymentForm } from '@/features/payment';
+import { useRecordPayment, PaymentForm } from '@/features/payment';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -9,10 +9,10 @@ import { useRouter } from 'next/navigation';
 export default function NewPaymentPage() {
   const router = useRouter();
   const { data: leases = [], isLoading: loadingLeases } = useLeases();
-  const createPaymentMutation = useCreatePayment();
+  const recordPaymentMutation = useRecordPayment();
 
-  const handlePaymentSubmit = (values: import('@/features/payment').PaymentFormValues & { ledgerId: string }) => {
-    createPaymentMutation.mutate(values, {
+  const handlePaymentSubmit = (values: { leaseId: string; amount: number; method: string; reference?: string; tenantId?: string }) => {
+    recordPaymentMutation.mutate(values, {
       onSuccess: () => {
         router.push('/dashboard/payments');
       },
@@ -40,7 +40,7 @@ export default function NewPaymentPage() {
           <PaymentForm
             leases={leases}
             onSubmit={handlePaymentSubmit}
-            submitting={createPaymentMutation.isPending}
+            submitting={recordPaymentMutation.isPending}
           />
         </div>
       )}

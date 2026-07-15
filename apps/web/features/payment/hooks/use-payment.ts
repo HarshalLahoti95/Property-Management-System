@@ -24,17 +24,16 @@ interface PaymentListResponse {
   meta: { total: number; page: number; limit: number; totalPages: number };
 }
 
-export function useCreatePayment() {
+export function useRecordPayment() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (values: {
-      ledgerId: string;
+      leaseId: string;
       amount: number;
-      paymentMethod: string;
-      transactionReference?: string;
-      paymentDate: string;
+      method: string;
+      reference?: string;
       tenantId?: string;
-    }) => paymentService.createPayment(values),
+    }) => paymentService.recordPayment(values),
     onMutate: async (newPayment) => {
       await queryClient.cancelQueries({ queryKey: paymentKeys.lists() });
 
@@ -49,13 +48,13 @@ export function useCreatePayment() {
           if (oldData && Array.isArray(oldData.data)) {
             const optimisticRecord: Payment = {
               id: 'temp-id-' + Date.now(),
-              ledgerId: newPayment.ledgerId,
+              ledgerId: '', // optimistic placeholder
               tenantId: newPayment.tenantId || '',
               amount: newPayment.amount,
-              paymentMethod: newPayment.paymentMethod as PaymentMethod,
-              transactionReference: newPayment.transactionReference || 'PENDING',
+              paymentMethod: newPayment.method as PaymentMethod,
+              transactionReference: newPayment.reference || 'PENDING',
               status: 'CLEARED',
-              paymentDate: newPayment.paymentDate,
+              paymentDate: new Date().toISOString(),
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             };
@@ -143,13 +142,3 @@ export function usePaymentAllocations(id: string) {
   });
 }
 
-export function useApprovePayment(id: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => paymentService.approvePayment(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: paymentKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
-    },
-  });
-}

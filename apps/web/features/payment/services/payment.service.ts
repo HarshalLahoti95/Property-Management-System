@@ -16,16 +16,14 @@ export const paymentService = {
     return (data as any)?.data || data;
   },
 
-  async createPayment(values: {
-    ledgerId: string;
+  async recordPayment(values: {
+    leaseId: string;
     amount: number;
-    paymentMethod: string;
-    transactionReference?: string;
-    paymentDate: string;
+    method: string;
+    reference?: string;
     tenantId?: string;
   }) {
-    const { leaseId, ...payload } = values as any;
-    const { data } = await apiClient.post<Payment>('/payments', payload);
+    const { data } = await apiClient.post<Payment>('/payments/record', values);
     return data;
   },
 
@@ -43,8 +41,4 @@ export const paymentService = {
     return (data as any)?.data || data;
   },
 
-  async approvePayment(id: string) {
-    const { data } = await apiClient.post<Payment>(`/payments/${id}/approve`);
-    return data;
-  },
 };

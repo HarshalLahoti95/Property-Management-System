@@ -6,18 +6,16 @@ import { PaymentMethodBadge } from './PaymentMethodBadge';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { RefundDialog } from './RefundDialog';
-import { useRefundPayment, useApprovePayment } from '../hooks/use-payment';
+import { useRefundPayment } from '../hooks/use-payment';
 
 export function PaymentCard({ payment }: { payment: Payment }) {
   const { user } = useAuth();
   const refundMutation = useRefundPayment(payment.id);
-  const approveMutation = useApprovePayment(payment.id);
   const [refundOpen, setRefundOpen] = React.useState(false);
 
   const isLandlord = user?.role === 'LANDLORD';
   const isLandlordOrAdmin = user?.role === 'ADMIN' || isLandlord;
   const isRefundable = payment.status === 'CLEARED';
-  const isApprovable = payment.status === 'PENDING' && payment.paymentMethod === 'CASH' && isLandlord;
 
   const handleRefundSubmit = (values: { amount?: number; reason: string }) => {
     refundMutation.mutate(values, {
@@ -76,22 +74,16 @@ export function PaymentCard({ payment }: { payment: Payment }) {
           </div>
         </div>
 
-        {isLandlordOrAdmin && (isRefundable || isApprovable) && (
+        {isLandlordOrAdmin && isRefundable && (
           <div className="flex justify-end gap-2 border-t border-border pt-4">
-            {isApprovable && (
-              <Button
-                onClick={() => approveMutation.mutate()}
-                disabled={approveMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-              >
-                {approveMutation.isPending ? 'Confirming...' : 'Confirm Cash Payment'}
-              </Button>
-            )}
-            {isRefundable && (
-              <Button variant="destructive" onClick={() => setRefundOpen(true)}>
-                Issue Refund
-              </Button>
-            )}
+            <Button
+              variant="destructive"
+              onClick={() => setRefundOpen(true)}
+              disabled
+              title="Refunds are temporarily disabled in v1 while the accounting service is upgraded."
+            >
+              Issue Refund
+            </Button>
           </div>
         )}
       </div>

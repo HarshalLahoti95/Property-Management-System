@@ -91,16 +91,30 @@ describe('Payment Feature Components', () => {
   describe('PaymentForm', () => {
     const mockLeases = [
       {
-        id: 'lease-1',
+        id: '11111111-1111-1111-1111-111111111111',
+        monthlyRent: 1500,
+        leaseTenants: [
+          { status: 'ACTIVE', tenantId: 't1', tenant: { fullName: 'Tenant One' } }
+        ],
         unit: {
           id: 'unit-1',
           name: '404',
-          property: {
-            id: 'prop-1',
-            name: 'Sunset Apartments',
-          },
+          property: { id: 'prop-1', name: 'Sunset Apartments' },
         },
       },
+      {
+        id: '22222222-2222-2222-2222-222222222222',
+        monthlyRent: 2000,
+        leaseTenants: [
+          { status: 'ACTIVE', tenantId: 't2', tenant: { fullName: 'Tenant Two' } },
+          { status: 'ACTIVE', tenantId: 't3', tenant: { fullName: 'Tenant Three' } }
+        ],
+        unit: {
+          id: 'unit-2',
+          name: '505',
+          property: { id: 'prop-2', name: 'Sunrise Apartments' },
+        },
+      }
     ];
 
     it('should validate form and show error for missing fields', async () => {
@@ -116,7 +130,45 @@ describe('Payment Feature Components', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Please select a lease agreement.')).toBeInTheDocument();
-        expect(screen.getByText('Transaction reference is required.')).toBeInTheDocument();
+      });
+    });
+
+    it('should block submission if multi-tenant lease is selected and no tenant is chosen', async () => {
+      const handleSubmit = jest.fn();
+      render(<PaymentForm leases={mockLeases as unknown as Lease[]} onSubmit={handleSubmit} />, { wrapper });
+
+      // Select lease-2 (Multi-tenant)
+      fireEvent.change(screen.getByLabelText(/select lease agreement/i), { target: { value: '22222222-2222-2222-2222-222222222222' } });
+
+      // Trigger submit
+      fireEvent.click(screen.getByRole('button', { name: /submit payment/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Please select the paying tenant.')).toBeInTheDocument();
+      });
+      expect(handleSubmit).not.toHaveBeenCalled();
+    });
+
+    it('should auto-select tenant and submit successfully for single-tenant lease', async () => {
+      const handleSubmit = jest.fn();
+      render(<PaymentForm leases={mockLeases as unknown as Lease[]} onSubmit={handleSubmit} />, { wrapper });
+
+      // Select lease-1 (Single-tenant)
+      fireEvent.change(screen.getByLabelText(/select lease agreement/i), { target: { value: '11111111-1111-1111-1111-111111111111' } });
+      
+      // Select ACH to avoid transaction reference required error
+      fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'CASH' } });
+
+      // Trigger submit
+      fireEvent.click(screen.getByRole('button', { name: /submit payment/i }));
+
+      await waitFor(() => {
+        expect(handleSubmit).toHaveBeenCalledWith(expect.objectContaining({
+          leaseId: '11111111-1111-1111-1111-111111111111',
+          tenantId: 't1',
+          amount: 1500,
+          method: 'CASH'
+        }));
       });
     });
   });

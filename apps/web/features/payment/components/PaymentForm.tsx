@@ -14,7 +14,7 @@ export function PaymentForm({
   submitting = false,
 }: {
   leases: Lease[];
-  onSubmit: (values: PaymentFormValues & { ledgerId: string }) => void;
+  onSubmit: (values: { leaseId: string; amount: number; method: string; reference?: string; tenantId?: string }) => void;
   submitting?: boolean;
 }) {
   const {
@@ -37,30 +37,37 @@ export function PaymentForm({
   const selectedLeaseId = useWatch({ control, name: 'leaseId' });
   const selectedPaymentMethod = useWatch({ control, name: 'paymentMethod' });
 
-  // Auto-populate rent amount when lease changes
+  // Auto-populate rent amount and tenant when lease changes
   React.useEffect(() => {
     if (selectedLeaseId) {
       const leaseObj = leases.find((l) => l.id === selectedLeaseId);
       if (leaseObj) {
         setValue('amount', Number(leaseObj.monthlyRent));
+        const activeTenants = leaseObj.leaseTenants?.filter((lt) => lt.status === 'ACTIVE' || lt.status === 'PENDING') || [];
+        if (activeTenants.length === 1) {
+          setValue('tenantId', activeTenants[0].tenantId);
+        } else {
+          setValue('tenantId', '');
+        }
       }
+    } else {
+      setValue('tenantId', '');
     }
   }, [selectedLeaseId, leases, setValue]);
 
-  // Fetch the ledgers for the selected lease to get the Operating Ledger ID
-  const { data: ledgers = [], isLoading: loadingLedgers } = useLedgersByLease(selectedLeaseId);
+  const activeTenantsForLease = React.useMemo(() => {
+    if (!selectedLeaseId) return [];
+    const leaseObj = leases.find((l) => l.id === selectedLeaseId);
+    return leaseObj?.leaseTenants?.filter((lt) => lt.status === 'ACTIVE' || lt.status === 'PENDING') || [];
+  }, [selectedLeaseId, leases]);
 
   const onFormSubmit = (values: PaymentFormValues) => {
-    // Pick the Operating ledger for standard rent payments
-    const operatingLedger = ledgers.find((l) => l.ledgerType === 'OPERATING');
-    if (!operatingLedger) {
-      alert('Could not resolve an active operating ledger for the selected lease. Please try again.');
-      return;
-    }
-
     onSubmit({
-      ...values,
-      ledgerId: operatingLedger.id,
+      leaseId: values.leaseId,
+      amount: values.amount,
+      method: values.paymentMethod,
+      reference: values.transactionReference,
+      tenantId: values.tenantId,
     });
   };
 
@@ -95,6 +102,34 @@ export function PaymentForm({
           </p>
         )}
       </div>
+
+      {selectedLeaseId && activeTenantsForLease.length > 0 && (
+        <div className="space-y-1">
+          <label htmlFor="payment-tenantId" className="text-sm font-semibold text-foreground">
+            Paying Tenant {activeTenantsForLease.length === 1 && '(Auto-selected)'}
+          </label>
+          <select
+            id="payment-tenantId"
+            {...register('tenantId')}
+            className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+            aria-invalid={!!errors.tenantId}
+            aria-describedby={errors.tenantId ? 'payment-tenantId-error' : undefined}
+            disabled={activeTenantsForLease.length === 1}
+          >
+            <option value="">Select Tenant...</option>
+            {activeTenantsForLease.map((lt) => (
+              <option key={lt.tenantId} value={lt.tenantId}>
+                {lt.tenant.fullName}
+              </option>
+            ))}
+          </select>
+          {errors.tenantId && (
+            <p id="payment-tenantId-error" className="text-xs font-semibold text-destructive">
+              {errors.tenantId.message}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="space-y-1">
         <label htmlFor="payment-amount" className="text-sm font-semibold text-foreground">
@@ -177,7 +212,7 @@ export function PaymentForm({
 
       <Button
         type="submit"
-        disabled={submitting || (!!selectedLeaseId && loadingLedgers)}
+        disabled={submitting}
         className="w-full"
       >
         {submitting ? 'Submitting Payment...' : 'Submit Payment'}
